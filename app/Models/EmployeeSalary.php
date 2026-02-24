@@ -63,12 +63,41 @@ class EmployeeSalary extends BaseModel
     }
 
     /**
+     * Parse components field and extract IDs and custom overrides.
+     * Supports both old format [1, 3, 5] and new format [{"id":1,"custom_amount":300000}, ...]
+     */
+    public function parseComponents()
+    {
+        $rawComponents = $this->components ?? [];
+        $componentIds = [];
+        $customOverrides = []; // keyed by component ID
+
+        foreach ($rawComponents as $entry) {
+            if (is_array($entry) && isset($entry['id'])) {
+                // New format: object with id and optional custom values
+                $componentIds[] = $entry['id'];
+                $customOverrides[$entry['id']] = [
+                    'custom_amount' => $entry['custom_amount'] ?? null,
+                    'custom_percentage' => $entry['custom_percentage'] ?? null,
+                ];
+            } else {
+                // Old format: plain ID (backward compatibility)
+                $componentIds[] = $entry;
+            }
+        }
+
+        return [$componentIds, $customOverrides];
+    }
+
+    /**
      * Calculate salary components based on selected components.
+     * Supports per-employee custom values with fallback to template defaults.
      */
     public function calculateAllComponents()
     {
-        $selectedComponentIds = $this->components ?? [];
-        $components = SalaryComponent::whereIn('id', $selectedComponentIds)
+        [$componentIds, $customOverrides] = $this->parseComponents();
+
+        $components = SalaryComponent::whereIn('id', $componentIds)
             ->where('status', 'active')
             ->whereIn('created_by', getCompanyAndUsersId())
             ->get();
@@ -80,7 +109,20 @@ class EmployeeSalary extends BaseModel
         $totalDeductions = 0;
 
         foreach ($components as $component) {
-            $amount = $component->calculateAmount($this->basic_salary);
+            $override = $customOverrides[$component->id] ?? [];
+            $customAmount = $override['custom_amount'] ?? null;
+            $customPercentage = $override['custom_percentage'] ?? null;
+
+            // Determine the amount: custom values take priority over template defaults
+            if (!is_null($customAmount) && $customAmount !== '' && $customAmount !== 0) {
+                $amount = (float) $customAmount;
+            } elseif (!is_null($customPercentage) && $customPercentage !== '' && $customPercentage !== 0) {
+                $amount = ($this->basic_salary * (float) $customPercentage) / 100;
+            } else {
+                // Fallback to template default
+                $amount = $component->calculateAmount($this->basic_salary);
+            }
+
             if ($component->type === 'earning') {
                 $earnings[$component->name] = $amount;
                 $totalEarnings += $amount;

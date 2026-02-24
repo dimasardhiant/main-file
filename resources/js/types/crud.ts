@@ -90,6 +90,12 @@ export interface FormField {
     maxLength?: number;
   };
   fileValidation?: FileValidation;
+  disabled?: boolean;
+  readOnly?: boolean;
+  min?: number;
+  max?: number;
+  step?: number | string;
+  defaultValue?: any;
   description?: string;
   colSpan?: number; // Number of columns this field should span (1-12)
   width?: string; // CSS width value (e.g., '50%', '200px')

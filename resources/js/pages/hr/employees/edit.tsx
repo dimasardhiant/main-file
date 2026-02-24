@@ -12,13 +12,14 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 import { toast } from '@/components/custom-toast';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, DollarSign } from 'lucide-react';
 import MediaPicker from '@/components/MediaPicker';
 import { getImagePath } from '@/utils/helpers';
+import { MultiSelectField } from '@/components/multi-select-field';
 
 export default function EmployeeEdit() {
   const { t } = useTranslation();
-  const { employee, branches, departments, designations, documentTypes, shifts, attendancePolicies } = usePage().props as any;
+  const { employee, branches, departments, designations, documentTypes, shifts, attendancePolicies, employeeSalary, salaryComponents } = usePage().props as any;
 
   // State
   const [formData, setFormData] = useState<Record<string, any>>({
@@ -64,6 +65,32 @@ export default function EmployeeEdit() {
   );
   const [existingDocuments, setExistingDocuments] = useState<any[]>(employee.employee?.documents || []);
   const [newDocuments, setNewDocuments] = useState<any[]>([]);
+
+  // Salary state
+  const [hasSalarySetup, setHasSalarySetup] = useState<boolean>(!!employeeSalary);
+  const [salaryComponentIds, setSalaryComponentIds] = useState<string[]>(() => {
+    if (!employeeSalary?.components) return [];
+    return (employeeSalary.components || []).map((entry: any) => {
+      if (typeof entry === 'object' && entry !== null && entry.id) return entry.id.toString();
+      return entry.toString();
+    });
+  });
+  const [salaryComponentOverrides, setSalaryComponentOverrides] = useState<Record<string, any>>(() => {
+    if (!employeeSalary?.components) return {};
+    const overrides: Record<string, any> = {};
+    (employeeSalary.components || []).forEach((entry: any) => {
+      if (typeof entry === 'object' && entry !== null && entry.id) {
+        overrides[entry.id.toString()] = {
+          custom_amount: entry.custom_amount || '',
+          custom_percentage: entry.custom_percentage || '',
+        };
+      } else {
+        overrides[entry.toString()] = { custom_amount: '', custom_percentage: '' };
+      }
+    });
+    return overrides;
+  });
+  const [salaryNotes, setSalaryNotes] = useState(employeeSalary?.notes || '');
 
   // Filter departments based on selected branch
   // const filteredDepartments = formData.branch_id
@@ -239,6 +266,24 @@ export default function EmployeeEdit() {
         submitData.append(`documents[${index}][expiry_date]`, doc.expiry_date);
       }
     });
+
+    // Add salary components data
+    if (hasSalarySetup && salaryComponentIds.length > 0) {
+      salaryComponentIds.forEach((idStr: string, index: number) => {
+        const id = parseInt(idStr);
+        const override = salaryComponentOverrides[idStr] || {};
+        submitData.append(`salary_components[${index}][id]`, id.toString());
+        if (override.custom_amount) {
+          submitData.append(`salary_components[${index}][custom_amount]`, override.custom_amount.toString());
+        }
+        if (override.custom_percentage) {
+          submitData.append(`salary_components[${index}][custom_percentage]`, override.custom_percentage.toString());
+        }
+      });
+      if (salaryNotes) {
+        submitData.append('salary_notes', salaryNotes);
+      }
+    }
 
     // Submit the form using POST with FormData directly
     router.post(route('hr.employees.update', employee.employee?.id), submitData, {
@@ -977,6 +1022,181 @@ export default function EmployeeEdit() {
                 {t('Add Document')}
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Salary & Components Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              {t('Salary & Components')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!hasSalarySetup ? (
+              <div className="text-center py-8">
+                <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+                  <DollarSign className="h-8 w-8 text-gray-400" />
+                </div>
+                <p className="text-gray-500 dark:text-gray-400 mb-4">
+                  {t('No salary record found for this employee.')}
+                </p>
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={() => setHasSalarySetup(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t('Setup Salary')}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Basic Salary Display */}
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{t('Basic Salary')}</p>
+                    <p className="text-lg font-semibold text-green-600">
+                      {window.appSettings?.formatCurrency(formData.salary || 0) || `Rp ${formData.salary || 0}`}
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20">
+                    {employeeSalary ? t('Active') : t('New')}
+                  </span>
+                </div>
+
+                {/* Salary Components Multi-Select */}
+                <div className="space-y-2">
+                  <Label>{t('Salary Components')}</Label>
+                  <MultiSelectField
+                    field={{
+                      name: 'salary_component_ids',
+                      label: t('Salary Components'),
+                      type: 'multi-select' as any,
+                      searchable: true,
+                      options: (salaryComponents || []).map((comp: any) => ({
+                        value: comp.id.toString(),
+                        label: `${comp.name} (${comp.type}) - ${comp.calculation_type === 'percentage' ? comp.percentage_of_basic + '%' : (window.appSettings?.formatCurrency(comp.default_amount) || 'Rp ' + comp.default_amount)}`
+                      })),
+                      placeholder: t('Select salary components'),
+                    }}
+                    formData={{ salary_component_ids: salaryComponentIds }}
+                    handleChange={(_name: string, value: any) => {
+                      setSalaryComponentIds(value || []);
+                      // Initialize overrides for newly added components
+                      const newOverrides = { ...salaryComponentOverrides };
+                      (value || []).forEach((id: string) => {
+                        if (!newOverrides[id]) {
+                          newOverrides[id] = { custom_amount: '', custom_percentage: '' };
+                        }
+                      });
+                      // Remove overrides for removed components
+                      Object.keys(newOverrides).forEach((id) => {
+                        if (!(value || []).includes(id)) {
+                          delete newOverrides[id];
+                        }
+                      });
+                      setSalaryComponentOverrides(newOverrides);
+                    }}
+                  />
+                </div>
+
+                {/* Custom Values per Component */}
+                {salaryComponentIds.length > 0 && (
+                  <div className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-800 space-y-3">
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                      {t('Custom Values per Component')}
+                    </p>
+                    {salaryComponentIds.map((idStr: string) => {
+                      const comp = salaryComponents?.find((c: any) => c.id.toString() === idStr);
+                      if (!comp) return null;
+                      const override = salaryComponentOverrides[idStr] || {};
+                      const isPercentage = comp.calculation_type === 'percentage';
+                      const defaultDisplay = isPercentage
+                        ? `${comp.percentage_of_basic}%`
+                        : (window.appSettings?.formatCurrency(comp.default_amount) || `Rp ${comp.default_amount}`);
+
+                      return (
+                        <div key={idStr} className="flex flex-col gap-1.5 p-2.5 bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-700">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset ${comp.type === 'earning'
+                                  ? 'bg-green-50 text-green-700 ring-green-700/10'
+                                  : 'bg-red-50 text-red-700 ring-red-700/10'
+                                }`}>
+                                {comp.type === 'earning' ? t('Earning') : t('Deduction')}
+                              </span>
+                              <span className="font-medium text-sm">{comp.name}</span>
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              {t('Default')}: {defaultDisplay}
+                            </span>
+                          </div>
+                          <div className="flex gap-2">
+                            {isPercentage ? (
+                              <div className="flex-1">
+                                <label className="text-xs text-gray-500 mb-0.5 block">{t('Custom Percentage (%)')}</label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min={0}
+                                  max={100}
+                                  placeholder={`${comp.percentage_of_basic}%`}
+                                  value={override.custom_percentage || ''}
+                                  onChange={(e) => {
+                                    const newOverrides = { ...salaryComponentOverrides };
+                                    newOverrides[idStr] = {
+                                      ...override,
+                                      custom_percentage: e.target.value ? parseFloat(e.target.value) : ''
+                                    };
+                                    setSalaryComponentOverrides(newOverrides);
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <div className="flex-1">
+                                <label className="text-xs text-gray-500 mb-0.5 block">{t('Custom Amount')}</label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min={0}
+                                  placeholder={comp.default_amount?.toString() || '0'}
+                                  value={override.custom_amount || ''}
+                                  onChange={(e) => {
+                                    const newOverrides = { ...salaryComponentOverrides };
+                                    newOverrides[idStr] = {
+                                      ...override,
+                                      custom_amount: e.target.value ? parseFloat(e.target.value) : ''
+                                    };
+                                    setSalaryComponentOverrides(newOverrides);
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                          {!override.custom_amount && !override.custom_percentage && (
+                            <p className="text-xs text-gray-400 italic">{t('Using default template value')}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Salary Notes */}
+                <div className="space-y-2">
+                  <Label htmlFor="salary_notes">{t('Salary Notes')}</Label>
+                  <Textarea
+                    id="salary_notes"
+                    value={salaryNotes}
+                    onChange={(e) => setSalaryNotes(e.target.value)}
+                    placeholder={t('Additional notes for this salary record')}
+                    rows={2}
+                  />
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

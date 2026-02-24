@@ -139,16 +139,35 @@ class EmployeeSalaryController extends Controller
 
             $employeeSalaries = $query->paginate($request->per_page ?? 10);
 
-            // Load component names and types for each salary record
+            // Load component names, types and custom overrides for each salary record
             $employeeSalaries->getCollection()->transform(function ($salary) {
                 if ($salary->components) {
-                    $components = SalaryComponent::whereIn('id', $salary->components)
-                        ->get(['id', 'name', 'type']);
+                    // Parse components using the model method (supports both old and new format)
+                    [$componentIds, $customOverrides] = $salary->parseComponents();
+                    
+                    $components = SalaryComponent::whereIn('id', $componentIds)
+                        ->get(['id', 'name', 'type', 'calculation_type', 'default_amount', 'percentage_of_basic']);
                     $salary->component_names = $components->pluck('name')->toArray();
                     $salary->component_types = $components->pluck('type')->toArray();
+                    
+                    // Enrich components with custom override info for the table display
+                    $salary->component_details = $components->map(function ($comp) use ($customOverrides) {
+                        $override = $customOverrides[$comp->id] ?? [];
+                        return [
+                            'id' => $comp->id,
+                            'name' => $comp->name,
+                            'type' => $comp->type,
+                            'calculation_type' => $comp->calculation_type,
+                            'default_amount' => $comp->default_amount,
+                            'percentage_of_basic' => $comp->percentage_of_basic,
+                            'custom_amount' => $override['custom_amount'] ?? null,
+                            'custom_percentage' => $override['custom_percentage'] ?? null,
+                        ];
+                    })->toArray();
                 } else {
                     $salary->component_names = [];
                     $salary->component_types = [];
+                    $salary->component_details = [];
                 }
                 return $salary;
             });
@@ -209,7 +228,9 @@ class EmployeeSalaryController extends Controller
             'employee_id' => 'required|exists:users,id',
             'basic_salary' => 'required|numeric|min:0',
             'components' => 'nullable|array',
-            'components.*' => 'exists:salary_components,id',
+            'components.*.id' => 'required|exists:salary_components,id',
+            'components.*.custom_amount' => 'nullable|numeric|min:0',
+            'components.*.custom_percentage' => 'nullable|numeric|min:0|max:100',
             'notes' => 'nullable|string',
         ]);
 
@@ -244,7 +265,9 @@ class EmployeeSalaryController extends Controller
                     'employee_id' => 'required|exists:users,id',
                     'basic_salary' => 'required|numeric|min:0',
                     'components' => 'nullable|array',
-                    'components.*' => 'exists:salary_components,id',
+                    'components.*.id' => 'required|exists:salary_components,id',
+                    'components.*.custom_amount' => 'nullable|numeric|min:0',
+                    'components.*.custom_percentage' => 'nullable|numeric|min:0|max:100',
                     'is_active' => 'boolean',
                     'notes' => 'nullable|string',
                 ]);

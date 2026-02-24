@@ -9,6 +9,8 @@ use App\Models\Designation;
 use App\Models\DocumentType;
 use App\Models\Employee;
 use App\Models\EmployeeDocument;
+use App\Models\EmployeeSalary;
+use App\Models\SalaryComponent;
 use App\Models\User;
 use Spatie\Permission\Models\Role;
 use Illuminate\Http\Request;
@@ -417,6 +419,16 @@ class EmployeeController extends Controller
                 ->where('status', 'active')
                 ->get(['id', 'name']);
 
+            // Get employee salary record (active one)
+            $employeeSalary = EmployeeSalary::where('employee_id', $employee->user_id)
+                ->whereIn('created_by', getCompanyAndUsersId())
+                ->first();
+
+            // Get all available salary components
+            $salaryComponents = SalaryComponent::whereIn('created_by', getCompanyAndUsersId())
+                ->where('status', 'active')
+                ->get();
+
             return Inertia::render('hr/employees/edit', [
                 'employee' => $user,
                 'branches' => $branches,
@@ -425,6 +437,8 @@ class EmployeeController extends Controller
                 'documentTypes' => $documentTypes,
                 'shifts' => $shifts,
                 'attendancePolicies' => $attendancePolicies,
+                'employeeSalary' => $employeeSalary,
+                'salaryComponents' => $salaryComponents,
             ]);
         } else {
             return redirect()->back()->with('error', __('Permission Denied.'));
@@ -546,6 +560,28 @@ class EmployeeController extends Controller
                 $employee->base_salary = $request->salary;
 
                 $employee->save();
+
+                // Handle salary create/update
+                if ($request->has('salary_components') && is_array($request->salary_components)) {
+                    $salaryData = [
+                        'employee_id' => $employee->user_id,
+                        'basic_salary' => $request->salary ?? $employee->base_salary ?? 0,
+                        'components' => $request->salary_components,
+                        'is_active' => true,
+                        'notes' => $request->salary_notes ?? null,
+                    ];
+
+                    $existingSalary = EmployeeSalary::where('employee_id', $employee->user_id)
+                        ->whereIn('created_by', getCompanyAndUsersId())
+                        ->first();
+
+                    if ($existingSalary) {
+                        $existingSalary->update($salaryData);
+                    } else {
+                        $salaryData['created_by'] = creatorId();
+                        EmployeeSalary::create($salaryData);
+                    }
+                }
 
                 // Handle document uploads
                 if ($request->has('documents') && is_array($request->documents)) {

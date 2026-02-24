@@ -1,7 +1,7 @@
 // pages/hr/employee-salaries/index.tsx
 import { useState, useEffect } from 'react';
 import React from 'react';
-import { PageTemplate } from '@/components/page-template';
+import { PageTemplate, PageAction } from '@/components/page-template';
 import { usePage, router } from '@inertiajs/react';
 import { Plus } from 'lucide-react';
 import { hasPermission } from '@/utils/authorization';
@@ -12,6 +12,14 @@ import { toast } from '@/components/custom-toast';
 import { useTranslation } from 'react-i18next';
 import { Pagination } from '@/components/ui/pagination';
 import { SearchAndFilterBar } from '@/components/ui/search-and-filter-bar';
+import { MultiSelectField } from '@/components/multi-select-field';
+
+type Flash = {
+  success?: string;
+  error?: string;
+};
+
+const getFlash = (page: any): Flash => (page.props.flash as Flash) || {};
 
 export default function EmployeeSalaries() {
   const { t } = useTranslation();
@@ -105,12 +113,13 @@ export default function EmployeeSalaries() {
 
       router.post(route('hr.employee-salaries.store'), formData, {
         onSuccess: (page) => {
+          const flash = getFlash(page);
           setIsFormModalOpen(false);
           toast.dismiss();
-          if (page.props.flash.success) {
-            toast.success(t(page.props.flash.success));
-          } else if (page.props.flash.error) {
-            toast.error(t(page.props.flash.error));
+          if (flash.success) {
+            toast.success(t(flash.success));
+          } else if (flash.error) {
+            toast.error(t(flash.error));
           }
         },
         onError: (errors) => {
@@ -127,12 +136,13 @@ export default function EmployeeSalaries() {
 
       router.put(route('hr.employee-salaries.update', currentItem.id), formData, {
         onSuccess: (page) => {
+          const flash = getFlash(page);
           setIsFormModalOpen(false);
           toast.dismiss();
-          if (page.props.flash.success) {
-            toast.success(t(page.props.flash.success));
-          } else if (page.props.flash.error) {
-            toast.error(t(page.props.flash.error));
+          if (flash.success) {
+            toast.success(t(flash.success));
+          } else if (flash.error) {
+            toast.error(t(flash.error));
           }
         },
         onError: (errors) => {
@@ -152,12 +162,13 @@ export default function EmployeeSalaries() {
 
     router.delete(route('hr.employee-salaries.destroy', currentItem.id), {
       onSuccess: (page) => {
+        const flash = getFlash(page);
         setIsDeleteModalOpen(false);
         toast.dismiss();
-        if (page.props.flash.success) {
-          toast.success(t(page.props.flash.success));
-        } else if (page.props.flash.error) {
-          toast.error(t(page.props.flash.error));
+        if (flash.success) {
+          toast.success(t(flash.success));
+        } else if (flash.error) {
+          toast.error(t(flash.error));
         }
       },
       onError: (errors) => {
@@ -177,11 +188,12 @@ export default function EmployeeSalaries() {
 
     router.put(route('hr.employee-salaries.toggle-status', salary.id), {}, {
       onSuccess: (page) => {
+        const flash = getFlash(page);
         toast.dismiss();
-        if (page.props.flash.success) {
-          toast.success(t(page.props.flash.success));
-        } else if (page.props.flash.error) {
-          toast.error(t(page.props.flash.error));
+        if (flash.success) {
+          toast.success(t(flash.success));
+        } else if (flash.error) {
+          toast.error(t(flash.error));
         }
       },
       onError: (errors) => {
@@ -198,8 +210,9 @@ export default function EmployeeSalaries() {
   const handleShowPayroll = (salary: any) => {
     router.get(route('hr.employee-salaries.show-payroll', salary.id), {}, {
       onSuccess: (page) => {
-        if (page.props.flash?.error) {
-          toast.error(t(page.props.flash.error));
+        const flash = getFlash(page);
+        if (flash.error) {
+          toast.error(t(flash.error));
         }
       },
       onError: (errors) => {
@@ -225,7 +238,7 @@ export default function EmployeeSalaries() {
   };
 
   // Define page actions
-  const pageActions = [];
+  const pageActions: PageAction[] = [];
 
   // Need to Remove Add the "Add New Salary" button if user has permission
   // if (hasPermission(permissions, 'create-employee-salaries')) {
@@ -275,8 +288,8 @@ export default function EmployeeSalaries() {
                     <span
                       key={index}
                       className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${isEarning
-                          ? 'bg-green-50 text-green-700 ring-green-700/10'
-                          : 'bg-red-50 text-red-700 ring-red-700/10'
+                        ? 'bg-green-50 text-green-700 ring-green-700/10'
+                        : 'bg-red-50 text-red-700 ring-red-700/10'
                         }`}
                     >
                       {name}
@@ -352,7 +365,7 @@ export default function EmployeeSalaries() {
 
   // Prepare options for filters and forms
   const employeeOptions = [
-    { value: 'all', label: t('All Employees'), disabled : true },
+    { value: 'all', label: t('All Employees'), disabled: true },
     ...(employees || []).map((emp: any) => ({
       value: emp.id.toString(),
       label: emp.name
@@ -360,7 +373,7 @@ export default function EmployeeSalaries() {
   ];
 
   const isActiveOptions = [
-    { value: 'all', label: t('All Status') , disabled : true},
+    { value: 'all', label: t('All Status'), disabled: true },
     { value: 'active', label: t('Active') },
     { value: 'inactive', label: t('Inactive') }
   ];
@@ -368,6 +381,7 @@ export default function EmployeeSalaries() {
   return (
     <PageTemplate
       title={t("Employee Salaries")}
+      description={t("Manage employee salary records")}
       url="/hr/employee-salaries"
       actions={pageActions}
       breadcrumbs={breadcrumbs}
@@ -387,7 +401,7 @@ export default function EmployeeSalaries() {
               value: selectedEmployee,
               onChange: setSelectedEmployee,
               options: employeeOptions,
-              searchable : true
+              searchable: true
             },
             {
               name: 'is_active',
@@ -431,7 +445,6 @@ export default function EmployeeSalaries() {
           permissions={permissions}
           entityPermissions={{
             view: 'view-employee-salaries',
-            create: 'create-employee-salaries',
             edit: 'edit-employee-salaries',
             delete: 'delete-employee-salaries'
           }}
@@ -452,7 +465,31 @@ export default function EmployeeSalaries() {
       <CrudFormModal
         isOpen={isFormModalOpen}
         onClose={() => setIsFormModalOpen(false)}
-        onSubmit={handleFormSubmit}
+        onSubmit={(formData: any) => {
+          // Transform the components data before submitting
+          const submissionData = { ...formData };
+
+          // The components field stores the selected IDs as string[]
+          // The component_overrides stores custom values per component
+          const selectedIds = formData.components || [];
+          const overrides = formData.component_overrides || {};
+
+          // Build the new components array format: [{id, custom_amount, custom_percentage}, ...]
+          submissionData.components = selectedIds.map((idStr: string) => {
+            const id = parseInt(idStr);
+            const override = overrides[idStr] || {};
+            return {
+              id: id,
+              custom_amount: override.custom_amount || null,
+              custom_percentage: override.custom_percentage || null,
+            };
+          });
+
+          // Remove the temporary overrides field
+          delete submissionData.component_overrides;
+
+          handleFormSubmit(submissionData);
+        }}
         formConfig={{
           fields: [
             {
@@ -460,7 +497,7 @@ export default function EmployeeSalaries() {
               label: t('Employee'),
               type: 'select',
               required: true,
-              searchable : true,
+              searchable: true,
               disabled: formMode === 'edit' || formMode === 'view',
               options: employees ? employees.map((emp: any) => ({
                 value: emp.id.toString(),
@@ -472,22 +509,164 @@ export default function EmployeeSalaries() {
               name: 'components',
               label: t('Salary Components'),
               type: 'multi-select',
-              searchable : true,
+              searchable: true,
               options: salaryComponents ? salaryComponents.map((comp: any) => ({
                 value: comp.id.toString(),
-                label: `${comp.name} (${comp.type}) - ${comp.calculation_type === 'percentage' ? comp.percentage_of_basic + '%' : 'Rs.' + comp.default_amount}`
+                label: `${comp.name} (${comp.type}) - ${comp.calculation_type === 'percentage' ? comp.percentage_of_basic + '%' : window.appSettings?.formatCurrency(comp.default_amount) || 'Rp ' + comp.default_amount}`
               })) : [],
-              placeholder: t('Select salary components')
+              placeholder: t('Select salary components'),
+              render: (field: any, formData: any, handleChange: any) => {
+                const selectedIds: string[] = Array.isArray(formData.components) ? formData.components : [];
+                const overrides = formData.component_overrides || {};
+
+                return (
+                  <div className="space-y-3">
+                    {/* Multi-select dropdown */}
+                    <MultiSelectField
+                      field={field}
+                      formData={formData}
+                      handleChange={(name: string, value: any) => {
+                        handleChange(name, value);
+                        // Initialize overrides for newly added components
+                        const newOverrides = { ...overrides };
+                        (value || []).forEach((id: string) => {
+                          if (!newOverrides[id]) {
+                            newOverrides[id] = { custom_amount: '', custom_percentage: '' };
+                          }
+                        });
+                        // Remove overrides for removed components
+                        Object.keys(newOverrides).forEach((id) => {
+                          if (!(value || []).includes(id)) {
+                            delete newOverrides[id];
+                          }
+                        });
+                        handleChange('component_overrides', newOverrides);
+                      }}
+                    />
+
+                    {/* Dynamic input fields for each selected component */}
+                    {selectedIds.length > 0 && (
+                      <div className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-800 space-y-3">
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                          {t('Custom Values per Component')}
+                        </p>
+                        {selectedIds.map((idStr: string) => {
+                          const comp = salaryComponents?.find((c: any) => c.id.toString() === idStr);
+                          if (!comp) return null;
+                          const override = overrides[idStr] || {};
+                          const isPercentage = comp.calculation_type === 'percentage';
+                          const defaultDisplay = isPercentage
+                            ? `${comp.percentage_of_basic}%`
+                            : (window.appSettings?.formatCurrency(comp.default_amount) || `Rp ${comp.default_amount}`);
+
+                          return (
+                            <div key={idStr} className="flex flex-col gap-1.5 p-2.5 bg-white dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-700">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset ${comp.type === 'earning'
+                                    ? 'bg-green-50 text-green-700 ring-green-700/10'
+                                    : 'bg-red-50 text-red-700 ring-red-700/10'
+                                    }`}>
+                                    {comp.type === 'earning' ? t('Earning') : t('Deduction')}
+                                  </span>
+                                  <span className="font-medium text-sm">{comp.name}</span>
+                                </div>
+                                <span className="text-xs text-gray-400">
+                                  {t('Default')}: {defaultDisplay}
+                                </span>
+                              </div>
+                              <div className="flex gap-2">
+                                {isPercentage ? (
+                                  <div className="flex-1">
+                                    <label className="text-xs text-gray-500 mb-0.5 block">{t('Custom Percentage (%)')}</label>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      max="100"
+                                      placeholder={`${comp.percentage_of_basic}%`}
+                                      value={override.custom_percentage || ''}
+                                      onChange={(e) => {
+                                        const newOverrides = { ...overrides };
+                                        newOverrides[idStr] = {
+                                          ...override,
+                                          custom_percentage: e.target.value ? parseFloat(e.target.value) : ''
+                                        };
+                                        handleChange('component_overrides', newOverrides);
+                                      }}
+                                      className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                                      disabled={formMode === 'view'}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="flex-1">
+                                    <label className="text-xs text-gray-500 mb-0.5 block">{t('Custom Amount')}</label>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      placeholder={comp.default_amount?.toString() || '0'}
+                                      value={override.custom_amount || ''}
+                                      onChange={(e) => {
+                                        const newOverrides = { ...overrides };
+                                        newOverrides[idStr] = {
+                                          ...override,
+                                          custom_amount: e.target.value ? parseFloat(e.target.value) : ''
+                                        };
+                                        handleChange('component_overrides', newOverrides);
+                                      }}
+                                      className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                                      disabled={formMode === 'view'}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                              {!override.custom_amount && !override.custom_percentage && (
+                                <p className="text-xs text-gray-400 italic">{t('Using default template value')}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
             },
             { name: 'is_active', label: t('Is Active'), type: 'checkbox', defaultValue: true },
-            { name: 'notes', label: t('Notes'), type: 'textarea', placeholder: t('Select components to be applied to this salary') }
+            { name: 'notes', label: t('Notes'), type: 'textarea', placeholder: t('Additional notes for this salary record') }
           ],
           modalSize: 'lg'
         }}
-        initialData={currentItem ? {
-          ...currentItem,
-          components: currentItem.components ? currentItem.components.map((id: any) => id.toString()) : []
-        } : null}
+        initialData={currentItem ? (() => {
+          // Parse the components field: could be old format [1,3,5] or new format [{id:1,custom_amount:...}, ...]
+          const rawComponents = currentItem.components || [];
+          const componentIds: string[] = [];
+          const componentOverrides: Record<string, any> = {};
+
+          rawComponents.forEach((entry: any) => {
+            if (typeof entry === 'object' && entry !== null && entry.id) {
+              // New format
+              const idStr = entry.id.toString();
+              componentIds.push(idStr);
+              componentOverrides[idStr] = {
+                custom_amount: entry.custom_amount || '',
+                custom_percentage: entry.custom_percentage || '',
+              };
+            } else {
+              // Old format (plain ID)
+              const idStr = entry.toString();
+              componentIds.push(idStr);
+              componentOverrides[idStr] = { custom_amount: '', custom_percentage: '' };
+            }
+          });
+
+          return {
+            ...currentItem,
+            components: componentIds,
+            component_overrides: componentOverrides,
+          };
+        })() : null}
         title={
           formMode === 'create'
             ? t('Setup Employee Salary')
