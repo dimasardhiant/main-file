@@ -23,7 +23,7 @@ const getFlash = (page: any): Flash => (page.props.flash as Flash) || {};
 
 export default function EmployeeSalaries() {
   const { t } = useTranslation();
-  const { auth, employeeSalaries, employees, salaryComponents, filters: pageFilters = {}, flash } = usePage().props as any;
+  const { auth, employeeSalaries, employees, salaryComponents, branches, departments, designations, filters: pageFilters = {}, flash } = usePage().props as any;
   const permissions = auth?.permissions || [];
 
 
@@ -32,6 +32,9 @@ export default function EmployeeSalaries() {
   const [searchTerm, setSearchTerm] = useState(pageFilters.search || '');
   const [selectedEmployee, setSelectedEmployee] = useState(pageFilters.employee_id || 'all');
   const [selectedIsActive, setSelectedIsActive] = useState(pageFilters.is_active || 'all');
+  const [selectedBranch, setSelectedBranch] = useState(pageFilters.branch || 'all');
+  const [selectedDepartment, setSelectedDepartment] = useState(pageFilters.department || 'all');
+  const [selectedDesignation, setSelectedDesignation] = useState(pageFilters.designation || 'all');
   const [showFilters, setShowFilters] = useState(false);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -40,12 +43,12 @@ export default function EmployeeSalaries() {
 
   // Check if any filters are active
   const hasActiveFilters = () => {
-    return searchTerm !== '' || selectedEmployee !== 'all' || selectedIsActive !== 'all';
+    return searchTerm !== '' || selectedEmployee !== 'all' || selectedIsActive !== 'all' || selectedBranch !== 'all' || selectedDepartment !== 'all' || selectedDesignation !== 'all';
   };
 
   // Count active filters
   const activeFilterCount = () => {
-    return (searchTerm ? 1 : 0) + (selectedEmployee !== 'all' ? 1 : 0) + (selectedIsActive !== 'all' ? 1 : 0);
+    return (searchTerm ? 1 : 0) + (selectedEmployee !== 'all' ? 1 : 0) + (selectedIsActive !== 'all' ? 1 : 0) + (selectedBranch !== 'all' ? 1 : 0) + (selectedDepartment !== 'all' ? 1 : 0) + (selectedDesignation !== 'all' ? 1 : 0);
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -59,6 +62,9 @@ export default function EmployeeSalaries() {
       search: searchTerm || undefined,
       employee_id: selectedEmployee !== 'all' ? selectedEmployee : undefined,
       is_active: selectedIsActive !== 'all' ? selectedIsActive : undefined,
+      branch: selectedBranch !== 'all' ? selectedBranch : undefined,
+      department: selectedDepartment !== 'all' ? selectedDepartment : undefined,
+      designation: selectedDesignation !== 'all' ? selectedDesignation : undefined,
       per_page: pageFilters.per_page
     }, { preserveState: true, preserveScroll: true });
   };
@@ -73,6 +79,9 @@ export default function EmployeeSalaries() {
       search: searchTerm || undefined,
       employee_id: selectedEmployee !== 'all' ? selectedEmployee : undefined,
       is_active: selectedIsActive !== 'all' ? selectedIsActive : undefined,
+      branch: selectedBranch !== 'all' ? selectedBranch : undefined,
+      department: selectedDepartment !== 'all' ? selectedDepartment : undefined,
+      designation: selectedDesignation !== 'all' ? selectedDesignation : undefined,
       per_page: pageFilters.per_page
     }, { preserveState: true, preserveScroll: true });
   };
@@ -229,6 +238,9 @@ export default function EmployeeSalaries() {
     setSearchTerm('');
     setSelectedEmployee('all');
     setSelectedIsActive('all');
+    setSelectedBranch('all');
+    setSelectedDepartment('all');
+    setSelectedDesignation('all');
     setShowFilters(false);
 
     router.get(route('hr.employee-salaries.index'), {
@@ -378,6 +390,30 @@ export default function EmployeeSalaries() {
     { value: 'inactive', label: t('Inactive') }
   ];
 
+  const branchOptions = [
+    { value: 'all', label: t('All Branches') },
+    ...(branches || []).map((branch: any) => ({
+      value: branch.id.toString(),
+      label: branch.name
+    }))
+  ];
+
+  const departmentOptions = [
+    { value: 'all', label: t('All Departments') },
+    ...(departments || []).map((department: any) => ({
+      value: department.id.toString(),
+      label: `${department.name} (${department.branch?.name || t('No Branch')})`
+    }))
+  ];
+
+  const designationOptions = [
+    { value: 'all', label: t('All Designations') },
+    ...(designations || []).map((designation: any) => ({
+      value: designation.id.toString(),
+      label: `${designation.name} (${designation.department?.name || t('No Department')})`
+    }))
+  ];
+
   return (
     <PageTemplate
       title={t("Employee Salaries")}
@@ -394,6 +430,33 @@ export default function EmployeeSalaries() {
           onSearchChange={setSearchTerm}
           onSearch={handleSearch}
           filters={[
+            {
+              name: 'branch',
+              label: t('Branch'),
+              type: 'select',
+              value: selectedBranch,
+              onChange: setSelectedBranch,
+              options: branchOptions,
+              searchable: true,
+            },
+            {
+              name: 'department',
+              label: t('Department'),
+              type: 'select',
+              value: selectedDepartment,
+              onChange: setSelectedDepartment,
+              options: departmentOptions,
+              searchable: true,
+            },
+            {
+              name: 'designation',
+              label: t('Designation'),
+              type: 'select',
+              value: selectedDesignation,
+              onChange: setSelectedDesignation,
+              options: designationOptions,
+              searchable: true,
+            },
             {
               name: 'employee_id',
               label: t('Employee'),
@@ -425,7 +488,10 @@ export default function EmployeeSalaries() {
               per_page: parseInt(value),
               search: searchTerm || undefined,
               employee_id: selectedEmployee !== 'all' ? selectedEmployee : undefined,
-              is_active: selectedIsActive !== 'all' ? selectedIsActive : undefined
+              is_active: selectedIsActive !== 'all' ? selectedIsActive : undefined,
+              branch: selectedBranch !== 'all' ? selectedBranch : undefined,
+              department: selectedDepartment !== 'all' ? selectedDepartment : undefined,
+              designation: selectedDesignation !== 'all' ? selectedDesignation : undefined
             }, { preserveState: true, preserveScroll: true });
           }}
         />

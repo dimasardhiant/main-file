@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Branch;
+use App\Models\Department;
+use App\Models\Designation;
 use App\Models\Payslip;
 use App\Models\PayrollEntry;
 use App\Models\User;
@@ -53,6 +56,27 @@ class PayslipController extends Controller
                 $query->where('pay_period_end', '<=', $request->date_to);
             }
 
+            // Handle branch filter
+            if ($request->has('branch') && !empty($request->branch) && $request->branch !== 'all') {
+                $query->whereHas('employee.employee', function ($q) use ($request) {
+                    $q->where('branch_id', $request->branch);
+                });
+            }
+
+            // Handle department filter
+            if ($request->has('department') && !empty($request->department) && $request->department !== 'all') {
+                $query->whereHas('employee.employee', function ($q) use ($request) {
+                    $q->where('department_id', $request->department);
+                });
+            }
+
+            // Handle designation filter
+            if ($request->has('designation') && !empty($request->designation) && $request->designation !== 'all') {
+                $query->whereHas('employee.employee', function ($q) use ($request) {
+                    $q->where('designation_id', $request->designation);
+                });
+            }
+
             // Handle sorting
             if ($request->has('sort_field') && !empty($request->sort_field)) {
                 $query->orderBy($request->sort_field, $request->sort_direction ?? 'asc');
@@ -67,10 +91,28 @@ class PayslipController extends Controller
                 ->whereIn('created_by', getCompanyAndUsersId())
                 ->get(['id', 'name']);
 
+            // Get branches, departments, designations for filters
+            $branches = Branch::whereIn('created_by', getCompanyAndUsersId())
+                ->where('status', 'active')
+                ->get(['id', 'name']);
+
+            $departments = Department::with('branch')
+                ->whereIn('created_by', getCompanyAndUsersId())
+                ->where('status', 'active')
+                ->get(['id', 'name', 'branch_id']);
+
+            $designations = Designation::with('department')
+                ->whereIn('created_by', getCompanyAndUsersId())
+                ->where('status', 'active')
+                ->get(['id', 'name', 'department_id']);
+
             return Inertia::render('hr/payslips/index', [
                 'payslips' => $payslips,
                 'employees' => $employees,
-                'filters' => $request->all(['search', 'employee_id', 'status', 'date_from', 'date_to', 'sort_field', 'sort_direction', 'per_page']),
+                'branches' => $branches,
+                'departments' => $departments,
+                'designations' => $designations,
+                'filters' => $request->all(['search', 'employee_id', 'status', 'date_from', 'date_to', 'branch', 'department', 'designation', 'sort_field', 'sort_direction', 'per_page']),
             ]);
         } else {
             return redirect()->back()->with('error', __('Permission Denied.'));

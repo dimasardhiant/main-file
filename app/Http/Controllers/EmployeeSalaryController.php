@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Branch;
+use App\Models\Department;
+use App\Models\Designation;
 use App\Models\Employee;
 use App\Models\EmployeeSalary;
 use App\Models\SalaryComponent;
@@ -130,6 +133,27 @@ class EmployeeSalaryController extends Controller
                 $query->where('is_active', $request->is_active === 'active');
             }
 
+            // Handle branch filter
+            if ($request->has('branch') && !empty($request->branch) && $request->branch !== 'all') {
+                $query->whereHas('employee.employee', function ($q) use ($request) {
+                    $q->where('branch_id', $request->branch);
+                });
+            }
+
+            // Handle department filter
+            if ($request->has('department') && !empty($request->department) && $request->department !== 'all') {
+                $query->whereHas('employee.employee', function ($q) use ($request) {
+                    $q->where('department_id', $request->department);
+                });
+            }
+
+            // Handle designation filter
+            if ($request->has('designation') && !empty($request->designation) && $request->designation !== 'all') {
+                $query->whereHas('employee.employee', function ($q) use ($request) {
+                    $q->where('designation_id', $request->designation);
+                });
+            }
+
             // Handle sorting
             if ($request->has('sort_field') && !empty($request->sort_field)) {
                 $query->orderBy($request->sort_field, $request->sort_direction ?? 'asc');
@@ -183,11 +207,29 @@ class EmployeeSalaryController extends Controller
                 ->whereIn('created_by', getCompanyAndUsersId())
                 ->get(['id', 'name', 'type', 'calculation_type', 'default_amount', 'percentage_of_basic']);
 
+            // Get branches, departments, designations for filters
+            $branches = Branch::whereIn('created_by', getCompanyAndUsersId())
+                ->where('status', 'active')
+                ->get(['id', 'name']);
+
+            $departments = Department::with('branch')
+                ->whereIn('created_by', getCompanyAndUsersId())
+                ->where('status', 'active')
+                ->get(['id', 'name', 'branch_id']);
+
+            $designations = Designation::with('department')
+                ->whereIn('created_by', getCompanyAndUsersId())
+                ->where('status', 'active')
+                ->get(['id', 'name', 'department_id']);
+
             return Inertia::render('hr/employee-salaries/index', [
                 'employeeSalaries' => $employeeSalaries,
                 'employees' => $this->getFilteredEmployees(),
                 'salaryComponents' => $salaryComponents,
-                'filters' => $request->all(['search', 'employee_id', 'is_active', 'sort_field', 'sort_direction', 'per_page']),
+                'branches' => $branches,
+                'departments' => $departments,
+                'designations' => $designations,
+                'filters' => $request->all(['search', 'employee_id', 'is_active', 'branch', 'department', 'designation', 'sort_field', 'sort_direction', 'per_page']),
             ]);
         } else {
             return redirect()->back()->with('error', __('Permission Denied.'));

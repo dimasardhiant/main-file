@@ -1,6 +1,6 @@
 // pages/hr/payroll-runs/index.tsx
 import { useState } from 'react';
-import { PageTemplate } from '@/components/page-template';
+import { PageTemplate, PageAction } from '@/components/page-template';
 import { usePage, router } from '@inertiajs/react';
 import { Plus, Play, Eye } from 'lucide-react';
 import { hasPermission } from '@/utils/authorization';
@@ -12,9 +12,16 @@ import { useTranslation } from 'react-i18next';
 import { Pagination } from '@/components/ui/pagination';
 import { SearchAndFilterBar } from '@/components/ui/search-and-filter-bar';
 
+type Flash = {
+  success?: string;
+  error?: string;
+};
+
+const getFlash = (page: any): Flash => (page.props.flash as Flash) || {};
+
 export default function PayrollRuns() {
   const { t } = useTranslation();
-  const { auth, payrollRuns, filters: pageFilters = {} } = usePage().props as any;
+  const { auth, payrollRuns, branches, departments, designations, filters: pageFilters = {} } = usePage().props as any;
   const permissions = auth?.permissions || [];
 
   // State
@@ -22,6 +29,9 @@ export default function PayrollRuns() {
   const [selectedStatus, setSelectedStatus] = useState(pageFilters.status || 'all');
   const [dateFrom, setDateFrom] = useState(pageFilters.date_from || '');
   const [dateTo, setDateTo] = useState(pageFilters.date_to || '');
+  const [selectedBranch, setSelectedBranch] = useState(pageFilters.branch || 'all');
+  const [selectedDepartment, setSelectedDepartment] = useState(pageFilters.department || 'all');
+  const [selectedDesignation, setSelectedDesignation] = useState(pageFilters.designation || 'all');
   const [showFilters, setShowFilters] = useState(false);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -30,12 +40,12 @@ export default function PayrollRuns() {
 
   // Check if any filters are active
   const hasActiveFilters = () => {
-    return searchTerm !== '' || selectedStatus !== 'all' || dateFrom !== '' || dateTo !== '';
+    return searchTerm !== '' || selectedStatus !== 'all' || dateFrom !== '' || dateTo !== '' || selectedBranch !== 'all' || selectedDepartment !== 'all' || selectedDesignation !== 'all';
   };
 
   // Count active filters
   const activeFilterCount = () => {
-    return (searchTerm ? 1 : 0) + (selectedStatus !== 'all' ? 1 : 0) + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0);
+    return (searchTerm ? 1 : 0) + (selectedStatus !== 'all' ? 1 : 0) + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (selectedBranch !== 'all' ? 1 : 0) + (selectedDepartment !== 'all' ? 1 : 0) + (selectedDesignation !== 'all' ? 1 : 0);
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -50,6 +60,9 @@ export default function PayrollRuns() {
       status: selectedStatus !== 'all' ? selectedStatus : undefined,
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
+      branch: selectedBranch !== 'all' ? selectedBranch : undefined,
+      department: selectedDepartment !== 'all' ? selectedDepartment : undefined,
+      designation: selectedDesignation !== 'all' ? selectedDesignation : undefined,
       per_page: pageFilters.per_page
     }, { preserveState: true, preserveScroll: true });
   };
@@ -65,6 +78,9 @@ export default function PayrollRuns() {
       status: selectedStatus !== 'all' ? selectedStatus : undefined,
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
+      branch: selectedBranch !== 'all' ? selectedBranch : undefined,
+      department: selectedDepartment !== 'all' ? selectedDepartment : undefined,
+      designation: selectedDesignation !== 'all' ? selectedDesignation : undefined,
       per_page: pageFilters.per_page
     }, { preserveState: true, preserveScroll: true });
   };
@@ -104,12 +120,13 @@ export default function PayrollRuns() {
 
       router.post(route('hr.payroll-runs.store'), formData, {
         onSuccess: (page) => {
+          const flash = getFlash(page);
           setIsFormModalOpen(false);
           toast.dismiss();
-          if (page.props.flash.success) {
-            toast.success(t(page.props.flash.success));
-          } else if (page.props.flash.error) {
-            toast.error(t(page.props.flash.error));
+          if (flash.success) {
+            toast.success(t(flash.success));
+          } else if (flash.error) {
+            toast.error(t(flash.error));
           }
         },
         onError: (errors) => {
@@ -126,12 +143,13 @@ export default function PayrollRuns() {
 
       router.put(route('hr.payroll-runs.update', currentItem.id), formData, {
         onSuccess: (page) => {
+          const flash = getFlash(page);
           setIsFormModalOpen(false);
           toast.dismiss();
-          if (page.props.flash.success) {
-            toast.success(t(page.props.flash.success));
-          } else if (page.props.flash.error) {
-            toast.error(t(page.props.flash.error));
+          if (flash.success) {
+            toast.success(t(flash.success));
+          } else if (flash.error) {
+            toast.error(t(flash.error));
           }
         },
         onError: (errors) => {
@@ -151,12 +169,13 @@ export default function PayrollRuns() {
 
     router.delete(route('hr.payroll-runs.destroy', currentItem.id), {
       onSuccess: (page) => {
+        const flash = getFlash(page);
         setIsDeleteModalOpen(false);
         toast.dismiss();
-        if (page.props.flash.success) {
-          toast.success(t(page.props.flash.success));
-        } else if (page.props.flash.error) {
-          toast.error(t(page.props.flash.error));
+        if (flash.success) {
+          toast.success(t(flash.success));
+        } else if (flash.error) {
+          toast.error(t(flash.error));
         }
       },
       onError: (errors) => {
@@ -175,11 +194,12 @@ export default function PayrollRuns() {
 
     router.put(route('hr.payroll-runs.process', payrollRun.id), {}, {
       onSuccess: (page) => {
+        const flash = getFlash(page);
         toast.dismiss();
-        if (page.props.flash.success) {
-          toast.success(t(page.props.flash.success));
-        } else if (page.props.flash.error) {
-          toast.error(t(page.props.flash.error));
+        if (flash.success) {
+          toast.success(t(flash.success));
+        } else if (flash.error) {
+          toast.error(t(flash.error));
         }
       },
       onError: (errors) => {
@@ -200,15 +220,16 @@ export default function PayrollRuns() {
       payroll_run_id: payrollRun.id
     }, {
       onSuccess: (page) => {
+        const flash = getFlash(page);
         toast.dismiss();
-        if (page.props.flash.success) {
-          toast.success(t(page.props.flash.success));
+        if (flash.success) {
+          toast.success(t(flash.success));
           // Redirect to payslips page to see generated payslips
           setTimeout(() => {
             router.get(route('hr.payslips.index'));
           }, 1000);
-        } else if (page.props.flash.error) {
-          toast.error(t(page.props.flash.error));
+        } else if (flash.error) {
+          toast.error(t(flash.error));
         }
       },
       onError: (errors) => {
@@ -227,6 +248,9 @@ export default function PayrollRuns() {
     setSelectedStatus('all');
     setDateFrom('');
     setDateTo('');
+    setSelectedBranch('all');
+    setSelectedDepartment('all');
+    setSelectedDesignation('all');
     setShowFilters(false);
 
     router.get(route('hr.payroll-runs.index'), {
@@ -236,14 +260,14 @@ export default function PayrollRuns() {
   };
 
   // Define page actions
-  const pageActions = [];
+  const pageActions: PageAction[] = [];
 
   // Add the "Add New Payroll Run" button if user has permission
   if (hasPermission(permissions, 'create-payroll-runs')) {
     pageActions.push({
       label: t('Add Payroll Run'),
       icon: <Plus className="h-4 w-4 mr-2" />,
-      variant: 'default',
+      variant: 'default' as const,
       onClick: () => handleAddNew()
     });
   }
@@ -378,9 +402,34 @@ export default function PayrollRuns() {
     { value: 'cancelled', label: t('Cancelled') }
   ];
 
+  const branchOptions = [
+    { value: 'all', label: t('All Branches') },
+    ...(branches || []).map((branch: any) => ({
+      value: branch.id.toString(),
+      label: branch.name
+    }))
+  ];
+
+  const departmentOptions = [
+    { value: 'all', label: t('All Departments') },
+    ...(departments || []).map((department: any) => ({
+      value: department.id.toString(),
+      label: `${department.name} (${department.branch?.name || t('No Branch')})`
+    }))
+  ];
+
+  const designationOptions = [
+    { value: 'all', label: t('All Designations') },
+    ...(designations || []).map((designation: any) => ({
+      value: designation.id.toString(),
+      label: `${designation.name} (${designation.department?.name || t('No Department')})`
+    }))
+  ];
+
   return (
     <PageTemplate
       title={t("Payroll Runs")}
+      description={t("Manage payroll runs")}
       url="/hr/payroll-runs"
       actions={pageActions}
       breadcrumbs={breadcrumbs}
@@ -393,6 +442,33 @@ export default function PayrollRuns() {
           onSearchChange={setSearchTerm}
           onSearch={handleSearch}
           filters={[
+            {
+              name: 'branch',
+              label: t('Branch'),
+              type: 'select',
+              value: selectedBranch,
+              onChange: setSelectedBranch,
+              options: branchOptions,
+              searchable: true,
+            },
+            {
+              name: 'department',
+              label: t('Department'),
+              type: 'select',
+              value: selectedDepartment,
+              onChange: setSelectedDepartment,
+              options: departmentOptions,
+              searchable: true,
+            },
+            {
+              name: 'designation',
+              label: t('Designation'),
+              type: 'select',
+              value: selectedDesignation,
+              onChange: setSelectedDesignation,
+              options: designationOptions,
+              searchable: true,
+            },
             {
               name: 'status',
               label: t('Status'),
@@ -430,7 +506,10 @@ export default function PayrollRuns() {
               search: searchTerm || undefined,
               status: selectedStatus !== 'all' ? selectedStatus : undefined,
               date_from: dateFrom || undefined,
-              date_to: dateTo || undefined
+              date_to: dateTo || undefined,
+              branch: selectedBranch !== 'all' ? selectedBranch : undefined,
+              department: selectedDepartment !== 'all' ? selectedDepartment : undefined,
+              designation: selectedDesignation !== 'all' ? selectedDesignation : undefined
             }, { preserveState: true, preserveScroll: true });
           }}
         />
@@ -450,7 +529,6 @@ export default function PayrollRuns() {
           permissions={permissions}
           entityPermissions={{
             view: 'view-payroll-runs',
-            create: 'create-payroll-runs',
             edit: 'edit-payroll-runs',
             delete: 'delete-payroll-runs'
           }}

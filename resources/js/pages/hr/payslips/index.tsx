@@ -1,6 +1,6 @@
 // pages/hr/payslips/index.tsx
 import { useState } from 'react';
-import { PageTemplate } from '@/components/page-template';
+import { PageTemplate, PageAction } from '@/components/page-template';
 import { usePage, router } from '@inertiajs/react';
 import { Plus, Download, FileText } from 'lucide-react';
 import { hasPermission } from '@/utils/authorization';
@@ -12,7 +12,7 @@ import { SearchAndFilterBar } from '@/components/ui/search-and-filter-bar';
 
 export default function Payslips() {
   const { t } = useTranslation();
-  const { auth, payslips, employees, filters: pageFilters = {} } = usePage().props as any;
+  const { auth, payslips, employees, branches, departments, designations, filters: pageFilters = {} } = usePage().props as any;
   const permissions = auth?.permissions || [];
 
   // State
@@ -21,16 +21,19 @@ export default function Payslips() {
   const [selectedStatus, setSelectedStatus] = useState(pageFilters.status || 'all');
   const [dateFrom, setDateFrom] = useState(pageFilters.date_from || '');
   const [dateTo, setDateTo] = useState(pageFilters.date_to || '');
+  const [selectedBranch, setSelectedBranch] = useState(pageFilters.branch || 'all');
+  const [selectedDepartment, setSelectedDepartment] = useState(pageFilters.department || 'all');
+  const [selectedDesignation, setSelectedDesignation] = useState(pageFilters.designation || 'all');
   const [showFilters, setShowFilters] = useState(false);
 
   // Check if any filters are active
   const hasActiveFilters = () => {
-    return searchTerm !== '' || selectedEmployee !== 'all' || selectedStatus !== 'all' || dateFrom !== '' || dateTo !== '';
+    return searchTerm !== '' || selectedEmployee !== 'all' || selectedStatus !== 'all' || dateFrom !== '' || dateTo !== '' || selectedBranch !== 'all' || selectedDepartment !== 'all' || selectedDesignation !== 'all';
   };
 
   // Count active filters
   const activeFilterCount = () => {
-    return (searchTerm ? 1 : 0) + (selectedEmployee !== 'all' ? 1 : 0) + (selectedStatus !== 'all' ? 1 : 0) + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0);
+    return (searchTerm ? 1 : 0) + (selectedEmployee !== 'all' ? 1 : 0) + (selectedStatus !== 'all' ? 1 : 0) + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (selectedBranch !== 'all' ? 1 : 0) + (selectedDepartment !== 'all' ? 1 : 0) + (selectedDesignation !== 'all' ? 1 : 0);
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -46,6 +49,9 @@ export default function Payslips() {
       status: selectedStatus !== 'all' ? selectedStatus : undefined,
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
+      branch: selectedBranch !== 'all' ? selectedBranch : undefined,
+      department: selectedDepartment !== 'all' ? selectedDepartment : undefined,
+      designation: selectedDesignation !== 'all' ? selectedDesignation : undefined,
       per_page: pageFilters.per_page
     }, { preserveState: true, preserveScroll: true });
   };
@@ -62,6 +68,9 @@ export default function Payslips() {
       status: selectedStatus !== 'all' ? selectedStatus : undefined,
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
+      branch: selectedBranch !== 'all' ? selectedBranch : undefined,
+      department: selectedDepartment !== 'all' ? selectedDepartment : undefined,
+      designation: selectedDesignation !== 'all' ? selectedDesignation : undefined,
       per_page: pageFilters.per_page
     }, { preserveState: true, preserveScroll: true });
   };
@@ -78,7 +87,7 @@ export default function Payslips() {
     toast.loading(t('Downloading payslip...'));
 
     window.location.href = route('hr.payslips.download', payslip.id);
-    
+
     // Clear loading toast and refresh data after download
     setTimeout(() => {
       toast.dismiss();
@@ -93,6 +102,9 @@ export default function Payslips() {
     setSelectedStatus('all');
     setDateFrom('');
     setDateTo('');
+    setSelectedBranch('all');
+    setSelectedDepartment('all');
+    setSelectedDesignation('all');
     setShowFilters(false);
 
     router.get(route('hr.payslips.index'), {
@@ -102,7 +114,7 @@ export default function Payslips() {
   };
 
   // Define page actions
-  const pageActions = [];
+  const pageActions: PageAction[] = [];
 
   const breadcrumbs = [
     { title: t('Dashboard'), href: route('dashboard') },
@@ -201,9 +213,34 @@ export default function Payslips() {
     { value: 'downloaded', label: t('Downloaded') }
   ];
 
+  const branchOptions = [
+    { value: 'all', label: t('All Branches') },
+    ...(branches || []).map((branch: any) => ({
+      value: branch.id.toString(),
+      label: branch.name
+    }))
+  ];
+
+  const departmentOptions = [
+    { value: 'all', label: t('All Departments') },
+    ...(departments || []).map((department: any) => ({
+      value: department.id.toString(),
+      label: `${department.name} (${department.branch?.name || t('No Branch')})`
+    }))
+  ];
+
+  const designationOptions = [
+    { value: 'all', label: t('All Designations') },
+    ...(designations || []).map((designation: any) => ({
+      value: designation.id.toString(),
+      label: `${designation.name} (${designation.department?.name || t('No Department')})`
+    }))
+  ];
+
   return (
     <PageTemplate
       title={t("Payslips")}
+      description={t("Manage payslips")}
       url="/hr/payslips"
       actions={pageActions}
       breadcrumbs={breadcrumbs}
@@ -216,6 +253,33 @@ export default function Payslips() {
           onSearchChange={setSearchTerm}
           onSearch={handleSearch}
           filters={[
+            {
+              name: 'branch',
+              label: t('Branch'),
+              type: 'select',
+              value: selectedBranch,
+              onChange: setSelectedBranch,
+              options: branchOptions,
+              searchable: true,
+            },
+            {
+              name: 'department',
+              label: t('Department'),
+              type: 'select',
+              value: selectedDepartment,
+              onChange: setSelectedDepartment,
+              options: departmentOptions,
+              searchable: true,
+            },
+            {
+              name: 'designation',
+              label: t('Designation'),
+              type: 'select',
+              value: selectedDesignation,
+              onChange: setSelectedDesignation,
+              options: designationOptions,
+              searchable: true,
+            },
             {
               name: 'employee_id',
               label: t('Employee'),
@@ -262,7 +326,10 @@ export default function Payslips() {
               employee_id: selectedEmployee !== 'all' ? selectedEmployee : undefined,
               status: selectedStatus !== 'all' ? selectedStatus : undefined,
               date_from: dateFrom || undefined,
-              date_to: dateTo || undefined
+              date_to: dateTo || undefined,
+              branch: selectedBranch !== 'all' ? selectedBranch : undefined,
+              department: selectedDepartment !== 'all' ? selectedDepartment : undefined,
+              designation: selectedDesignation !== 'all' ? selectedDesignation : undefined
             }, { preserveState: true, preserveScroll: true });
           }}
         />
@@ -282,7 +349,6 @@ export default function Payslips() {
           permissions={permissions}
           entityPermissions={{
             view: 'view-payslips',
-            create: 'create-payslips',
             edit: 'edit-payslips',
             delete: 'delete-payslips'
           }}
