@@ -12,6 +12,12 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 
 class EmployeeSalaryController extends Controller
 {
@@ -547,5 +553,288 @@ class EmployeeSalaryController extends Controller
         $summary['unpaid_leave_days'] = $summary['absent_days'] + ($summary['half_days'] * 0.5);
 
         return $summary;
+    }
+
+    /**
+     * Export employee salaries to Excel.
+     */
+    public function exportExcel(Request $request)
+    {
+        // Build query with same filters as index
+        $query = EmployeeSalary::with(['employee.employee.branch', 'employee.employee.department', 'employee.employee.designation'])
+            ->whereIn('created_by', getCompanyAndUsersId());
+
+        // Apply filters
+        if ($request->has('search') && !empty($request->search)) {
+            $query->whereHas('employee', function ($q) use ($request) {
+                $q->where('name', 'like', '%' . $request->search . '%');
+            });
+        }
+
+        if ($request->has('employee_id') && !empty($request->employee_id) && $request->employee_id !== 'all') {
+            $query->where('employee_id', $request->employee_id);
+        }
+
+        if ($request->has('is_active') && !empty($request->is_active) && $request->is_active !== 'all') {
+            $query->where('is_active', $request->is_active === 'active' ? 1 : 0);
+        }
+
+        if ($request->has('branch') && !empty($request->branch) && $request->branch !== 'all') {
+            $query->whereHas('employee.employee', function ($q) use ($request) {
+                $q->where('branch_id', $request->branch);
+            });
+        }
+
+        if ($request->has('department') && !empty($request->department) && $request->department !== 'all') {
+            $query->whereHas('employee.employee', function ($q) use ($request) {
+                $q->where('department_id', $request->department);
+            });
+        }
+
+        if ($request->has('designation') && !empty($request->designation) && $request->designation !== 'all') {
+            $query->whereHas('employee.employee', function ($q) use ($request) {
+                $q->where('designation_id', $request->designation);
+            });
+        }
+
+        $salaries = $query->get();
+
+        // Create spreadsheet
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Employee Salaries');
+
+        // Define column headers
+        $headers = [
+            'A' => 'No',
+            'B' => 'Employee Name',
+            'C' => 'Branch',
+            'D' => 'Department',
+            'E' => 'Designation',
+            'F' => 'Basic Salary',
+            'G' => 'Monthly Salary - IDR',
+            'H' => 'THR & PKWT',
+            'I' => 'Bonus',
+            'J' => 'EE BPJS Working Social Security (JHT,JKK,JKM)',
+            'K' => 'EE BPJS Healthcare Scheme',
+            'L' => 'EE Pension Scheme',
+            'M' => 'EE Regular Personal Income Tax',
+            'N' => 'EE Irregular Income Tax',
+            'O' => 'Expenses',
+            'P' => 'ER Regular Personal Income Tax',
+            'Q' => 'ER Irregular Income Tax',
+            'R' => 'ER BPJS Working Social Security (JHT,JKK,JKM)',
+            'S' => 'ER BPJS Healthcare Scheme',
+            'T' => 'ER Pension Scheme',
+            'U' => 'Net Pay-IDR',
+            'V' => 'Total Statutory and Tax',
+            'W' => 'Total Employer Cost',
+        ];
+
+        // Set headers (Row 1: Category headers)
+        $sheet->setCellValue('A1', '');
+        $sheet->setCellValue('B1', '');
+        $sheet->setCellValue('C1', '');
+        $sheet->setCellValue('D1', '');
+        $sheet->setCellValue('E1', '');
+        $sheet->setCellValue('F1', '');
+        $sheet->setCellValue('G1', '');
+        $sheet->setCellValue('H1', 'Earnings');
+        $sheet->setCellValue('I1', '');
+        $sheet->setCellValue('J1', 'EE (Employee Deductions)');
+        $sheet->mergeCells('J1:O1');
+        $sheet->setCellValue('P1', 'ER (Employer Contributions)');
+        $sheet->mergeCells('P1:T1');
+        $sheet->setCellValue('U1', '');
+        $sheet->setCellValue('V1', '');
+        $sheet->setCellValue('W1', '');
+
+        // Set headers (Row 2: Column names)
+        $row = 2;
+        foreach ($headers as $col => $headerText) {
+            $sheet->setCellValue($col . $row, $headerText);
+        }
+
+        // Style the category header row (Row 1)
+        $categoryHeaderStyle = [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 11],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4472C4']],
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+        ];
+        $sheet->getStyle('A1:W1')->applyFromArray($categoryHeaderStyle);
+
+        // Style the column header row (Row 2) - green like the screenshot
+        $headerStyle = [
+            'font' => ['bold' => true, 'size' => 10],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '92D050']],
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+        ];
+        $sheet->getStyle('A2:W2')->applyFromArray($headerStyle);
+
+        // EE columns with yellow highlight
+        $eeStyle = ['fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFFF00']]];
+        $sheet->getStyle('J2:O2')->applyFromArray($eeStyle);
+
+        // ER columns with light orange
+        $erStyle = ['fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFC000']]];
+        $sheet->getStyle('P2:T2')->applyFromArray($erStyle);
+
+        // Result columns with pink
+        $resultStyle = ['fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FF99CC']]];
+        $sheet->getStyle('U2:W2')->applyFromArray($resultStyle);
+
+        // Set column widths
+        $columnWidths = [
+            'A' => 5, 'B' => 25, 'C' => 18, 'D' => 18, 'E' => 18,
+            'F' => 18, 'G' => 18, 'H' => 15, 'I' => 15,
+            'J' => 20, 'K' => 18, 'L' => 15, 'M' => 18, 'N' => 18, 'O' => 15,
+            'P' => 18, 'Q' => 18, 'R' => 20, 'S' => 18, 'T' => 15,
+            'U' => 18, 'V' => 18, 'W' => 20,
+        ];
+        foreach ($columnWidths as $col => $width) {
+            $sheet->getColumnDimension($col)->setWidth($width);
+        }
+
+        // Row height for header
+        $sheet->getRowDimension(1)->setRowHeight(25);
+        $sheet->getRowDimension(2)->setRowHeight(40);
+
+        // Populate data
+        $dataRow = 3;
+        $no = 1;
+
+        foreach ($salaries as $salary) {
+            $calculation = $salary->calculateAllComponents();
+            $employee = $salary->employee;
+            $employeeRecord = $employee?->employee;
+
+            // Initialize column values
+            $eeValues = [
+                'bpjs_social_security' => 0,
+                'bpjs_healthcare' => 0,
+                'pension' => 0,
+                'regular_income_tax' => 0,
+                'irregular_income_tax' => 0,
+                'expenses' => 0,
+            ];
+
+            $erValues = [
+                'regular_income_tax' => 0,
+                'irregular_income_tax' => 0,
+                'bpjs_social_security' => 0,
+                'bpjs_healthcare' => 0,
+                'pension' => 0,
+            ];
+
+            $earningValues = [
+                'thr_pkwt' => 0,
+                'bonus' => 0,
+            ];
+
+            // Map deductions to EE columns by pattern matching
+            foreach ($calculation['deductions'] as $name => $amount) {
+                $lowerName = strtolower($name);
+
+                if (strpos($lowerName, 'bpjs') !== false && (strpos($lowerName, 'jht') !== false || strpos($lowerName, 'jkk') !== false || strpos($lowerName, 'jkm') !== false || strpos($lowerName, 'social') !== false || strpos($lowerName, 'ketenagakerjaan') !== false || strpos($lowerName, 'working') !== false)) {
+                    $eeValues['bpjs_social_security'] += $amount;
+                } elseif (strpos($lowerName, 'bpjs') !== false && (strpos($lowerName, 'health') !== false || strpos($lowerName, 'kesehatan') !== false || strpos($lowerName, 'healthcare') !== false)) {
+                    $eeValues['bpjs_healthcare'] += $amount;
+                } elseif (strpos($lowerName, 'pension') !== false || strpos($lowerName, 'pensiun') !== false || strpos($lowerName, 'jp ') !== false) {
+                    $eeValues['pension'] += $amount;
+                } elseif (strpos($lowerName, 'tax') !== false || strpos($lowerName, 'pph') !== false || strpos($lowerName, 'pajak') !== false) {
+                    if (strpos($lowerName, 'irregular') !== false || strpos($lowerName, 'tidak teratur') !== false) {
+                        $eeValues['irregular_income_tax'] += $amount;
+                    } else {
+                        $eeValues['regular_income_tax'] += $amount;
+                    }
+                } elseif (strpos($lowerName, 'expense') !== false || strpos($lowerName, 'biaya') !== false) {
+                    $eeValues['expenses'] += $amount;
+                } else {
+                    // Unmapped deductions go to expenses
+                    $eeValues['expenses'] += $amount;
+                }
+            }
+
+            // Map earnings to columns
+            foreach ($calculation['earnings'] as $name => $amount) {
+                $lowerName = strtolower($name);
+
+                if ($lowerName === 'basic salary') {
+                    continue; // Already handled
+                }
+
+                if (strpos($lowerName, 'thr') !== false || strpos($lowerName, 'pkwt') !== false) {
+                    $earningValues['thr_pkwt'] += $amount;
+                } elseif (strpos($lowerName, 'bonus') !== false || strpos($lowerName, 'insentif') !== false || strpos($lowerName, 'incentive') !== false) {
+                    $earningValues['bonus'] += $amount;
+                }
+                // Other earnings are already counted in total_earnings
+            }
+
+            // Calculate totals
+            $totalEeDeductions = array_sum($eeValues);
+            $totalErContributions = array_sum($erValues);
+            $netPay = $calculation['net_salary'];
+            $totalStatutoryAndTax = $totalEeDeductions + $totalErContributions;
+            $totalEmployerCost = $netPay + $totalStatutoryAndTax;
+
+            // Write row data
+            $sheet->setCellValue('A' . $dataRow, $no);
+            $sheet->setCellValue('B' . $dataRow, $employee?->name ?? '-');
+            $sheet->setCellValue('C' . $dataRow, $employeeRecord?->branch?->name ?? '-');
+            $sheet->setCellValue('D' . $dataRow, $employeeRecord?->department?->name ?? '-');
+            $sheet->setCellValue('E' . $dataRow, $employeeRecord?->designation?->name ?? '-');
+            $sheet->setCellValue('F' . $dataRow, $calculation['basic_salary']);
+            $sheet->setCellValue('G' . $dataRow, $calculation['basic_salary']); // Monthly = Basic
+            $sheet->setCellValue('H' . $dataRow, $earningValues['thr_pkwt'] ?: '-');
+            $sheet->setCellValue('I' . $dataRow, $earningValues['bonus'] ?: '-');
+            $sheet->setCellValue('J' . $dataRow, $eeValues['bpjs_social_security'] ?: '-');
+            $sheet->setCellValue('K' . $dataRow, $eeValues['bpjs_healthcare'] ?: '-');
+            $sheet->setCellValue('L' . $dataRow, $eeValues['pension'] ?: '-');
+            $sheet->setCellValue('M' . $dataRow, $eeValues['regular_income_tax'] ?: '-');
+            $sheet->setCellValue('N' . $dataRow, $eeValues['irregular_income_tax'] ?: '-');
+            $sheet->setCellValue('O' . $dataRow, $eeValues['expenses'] ?: '-');
+            $sheet->setCellValue('P' . $dataRow, $erValues['regular_income_tax'] ?: '-');
+            $sheet->setCellValue('Q' . $dataRow, $erValues['irregular_income_tax'] ?: '-');
+            $sheet->setCellValue('R' . $dataRow, $erValues['bpjs_social_security'] ?: '-');
+            $sheet->setCellValue('S' . $dataRow, $erValues['bpjs_healthcare'] ?: '-');
+            $sheet->setCellValue('T' . $dataRow, $erValues['pension'] ?: '-');
+            $sheet->setCellValue('U' . $dataRow, $netPay);
+            $sheet->setCellValue('V' . $dataRow, $totalStatutoryAndTax);
+            $sheet->setCellValue('W' . $dataRow, $totalEmployerCost);
+
+            // Number format for currency columns
+            $numberFormat = '#,##0';
+            foreach (range('F', 'W') as $col) {
+                $cell = $sheet->getCell($col . $dataRow);
+                if (is_numeric($cell->getValue())) {
+                    $sheet->getStyle($col . $dataRow)->getNumberFormat()->setFormatCode($numberFormat);
+                }
+            }
+
+            // Apply borders for data rows
+            $sheet->getStyle('A' . $dataRow . ':W' . $dataRow)->applyFromArray([
+                'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+            ]);
+
+            $no++;
+            $dataRow++;
+        }
+
+        // Auto-filter
+        $sheet->setAutoFilter('A2:W' . ($dataRow - 1));
+
+        // Create response
+        $fileName = 'Employee_Salaries_' . date('Y-m-d_His') . '.xlsx';
+        $tempFile = tempnam(sys_get_temp_dir(), 'salary_export_');
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($tempFile);
+
+        return response()->download($tempFile, $fileName, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
     }
 }

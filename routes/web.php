@@ -1049,6 +1049,7 @@ Route::middleware(['auth', 'verified', 'setting'])->group(function () {
 
         // Employee Salaries routes
         Route::middleware('permission:manage-employee-salaries')->group(function () {
+            Route::get('hr/employee-salaries/export-excel', [\App\Http\Controllers\EmployeeSalaryController::class, 'exportExcel'])->name('hr.employee-salaries.export-excel');
             Route::get('hr/employee-salaries', [\App\Http\Controllers\EmployeeSalaryController::class, 'index'])->name('hr.employee-salaries.index');
             Route::post('hr/employee-salaries', [\App\Http\Controllers\EmployeeSalaryController::class, 'store'])->middleware('permission:create-employee-salaries')->name('hr.employee-salaries.store');
             Route::put('hr/employee-salaries/{employeeSalary}', [\App\Http\Controllers\EmployeeSalaryController::class, 'update'])->middleware('permission:edit-employee-salaries')->name('hr.employee-salaries.update');
