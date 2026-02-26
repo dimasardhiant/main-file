@@ -1071,9 +1071,10 @@ Route::middleware(['auth', 'verified', 'setting'])->group(function () {
 
         // Payslips routes
         Route::middleware('permission:manage-payslips')->group(function () {
+            Route::get('hr/payslips/export-excel', [\App\Http\Controllers\PayslipController::class, 'exportExcel'])->name('hr.payslips.export-excel');
             Route::get('hr/payslips', [\App\Http\Controllers\PayslipController::class, 'index'])->name('hr.payslips.index');
             Route::post('hr/payslips/generate', [\App\Http\Controllers\PayslipController::class, 'generate'])->middleware('permission:create-payslips')->name('hr.payslips.generate');
-            Route::post('hr/payslips/bulk-generate', [\App\Http\Controllers\PayslipController::class, 'bulkGene rate'])->middleware('permission:create-payslips')->name('hr.payslips.bulk-generate');
+            Route::post('hr/payslips/bulk-generate', [\App\Http\Controllers\PayslipController::class, 'bulkGenerate'])->middleware('permission:create-payslips')->name('hr.payslips.bulk-generate');
             Route::get('hr/payslips/{payslip}/download', [\App\Http\Controllers\PayslipController::class, 'download'])->middleware('permission:download-payslips')->name('hr.payslips.download');
         });
 

@@ -252,23 +252,6 @@ export default function EmployeeSalaries() {
   // Define page actions
   const pageActions: PageAction[] = [];
 
-  // Add Export Excel button
-  pageActions.push({
-    label: t('Export Excel'),
-    icon: <Download className="h-4 w-4 mr-2" />,
-    variant: 'outline' as const,
-    onClick: () => {
-      const params = new URLSearchParams();
-      if (searchTerm) params.append('search', searchTerm);
-      if (selectedEmployee && selectedEmployee !== 'all') params.append('employee_id', selectedEmployee);
-      if (selectedIsActive && selectedIsActive !== 'all') params.append('is_active', selectedIsActive);
-      if (selectedBranch && selectedBranch !== 'all') params.append('branch', selectedBranch);
-      if (selectedDepartment && selectedDepartment !== 'all') params.append('department', selectedDepartment);
-      if (selectedDesignation && selectedDesignation !== 'all') params.append('designation', selectedDesignation);
-      window.location.href = route('hr.employee-salaries.export-excel') + '?' + params.toString();
-    }
-  });
-
   // Need to Remove Add the "Add New Salary" button if user has permission
   // if (hasPermission(permissions, 'create-employee-salaries')) {
   //   pageActions.push({

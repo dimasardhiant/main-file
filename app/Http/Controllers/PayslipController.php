@@ -12,6 +12,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class PayslipController extends Controller
 {
@@ -248,5 +253,298 @@ class PayslipController extends Controller
         } catch (\Exception $e) {
             return redirect()->back()->with('error', __('Failed to generate payslips: :message', ['message' => $e->getMessage()]));
         }
+    }
+
+    /**
+     * Export payslips to Excel.
+     */
+    public function exportExcel(Request $request)
+    {
+        // Build query with same filters as index
+        $query = Payslip::with(['employee.employee.branch', 'employee.employee.department', 'employee.employee.designation', 'payrollEntry'])
+            ->where(function ($q) {
+                if (Auth::user()->can('manage-any-payslips')) {
+                    $q->whereIn('created_by', getCompanyAndUsersId());
+                } elseif (Auth::user()->can('manage-own-payslips')) {
+                    $q->orWhere('employee_id', Auth::id());
+                } else {
+                    $q->whereRaw('1 = 0');
+                }
+            });
+
+        // Apply filters
+        if ($request->has('search') && !empty($request->search)) {
+            $query->where(function ($q) use ($request) {
+                $q->where('payslip_number', 'like', '%' . $request->search . '%')
+                    ->orWhereHas('employee', function ($subQ) use ($request) {
+                        $subQ->where('name', 'like', '%' . $request->search . '%');
+                    });
+            });
+        }
+
+        if ($request->has('employee_id') && !empty($request->employee_id) && $request->employee_id !== 'all') {
+            $query->where('employee_id', $request->employee_id);
+        }
+
+        if ($request->has('status') && !empty($request->status) && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->has('date_from') && !empty($request->date_from)) {
+            $query->where('pay_period_start', '>=', $request->date_from);
+        }
+        if ($request->has('date_to') && !empty($request->date_to)) {
+            $query->where('pay_period_end', '<=', $request->date_to);
+        }
+
+        if ($request->has('branch') && !empty($request->branch) && $request->branch !== 'all') {
+            $query->whereHas('employee.employee', function ($q) use ($request) {
+                $q->where('branch_id', $request->branch);
+            });
+        }
+
+        if ($request->has('department') && !empty($request->department) && $request->department !== 'all') {
+            $query->whereHas('employee.employee', function ($q) use ($request) {
+                $q->where('department_id', $request->department);
+            });
+        }
+
+        if ($request->has('designation') && !empty($request->designation) && $request->designation !== 'all') {
+            $query->whereHas('employee.employee', function ($q) use ($request) {
+                $q->where('designation_id', $request->designation);
+            });
+        }
+
+        $payslips = $query->orderBy('pay_date', 'desc')->get();
+
+        // Create spreadsheet
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Payslips');
+
+        // Define column headers
+        $headers = [
+            'A' => 'No',
+            'B' => 'Employee Name',
+            'C' => 'Payslip Number',
+            'D' => 'Pay Period',
+            'E' => 'Branch',
+            'F' => 'Department',
+            'G' => 'Designation',
+            'H' => 'Basic Salary',
+            'I' => 'Monthly Salary - IDR',
+            'J' => 'THR & PKWT',
+            'K' => 'Bonus',
+            'L' => 'EE BPJS Working Social Security (JHT,JKK,JKM)',
+            'M' => 'EE BPJS Healthcare Scheme',
+            'N' => 'EE Pension Scheme',
+            'O' => 'EE Regular Personal Income Tax',
+            'P' => 'EE Irregular Income Tax',
+            'Q' => 'Expenses',
+            'R' => 'ER Regular Personal Income Tax',
+            'S' => 'ER Irregular Income Tax',
+            'T' => 'ER BPJS Working Social Security (JHT,JKK,JKM)',
+            'U' => 'ER BPJS Healthcare Scheme',
+            'V' => 'ER Pension Scheme',
+            'W' => 'Net Pay-IDR',
+            'X' => 'Total Statutory and Tax',
+            'Y' => 'Total Employer Cost',
+        ];
+
+        // Row 1: Category headers
+        $sheet->setCellValue('J1', 'Earnings');
+        $sheet->mergeCells('J1:K1');
+        $sheet->setCellValue('L1', 'EE (Employee Deductions)');
+        $sheet->mergeCells('L1:Q1');
+        $sheet->setCellValue('R1', 'ER (Employer Contributions)');
+        $sheet->mergeCells('R1:V1');
+
+        // Row 2: Column names
+        foreach ($headers as $col => $headerText) {
+            $sheet->setCellValue($col . '2', $headerText);
+        }
+
+        // Style category header row (Row 1)
+        $sheet->getStyle('A1:Y1')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 11],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '4472C4']],
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+        ]);
+
+        // Style column header row (Row 2) - green
+        $sheet->getStyle('A2:Y2')->applyFromArray([
+            'font' => ['bold' => true, 'size' => 10],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER, 'wrapText' => true],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '92D050']],
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+        ]);
+
+        // EE columns yellow
+        $sheet->getStyle('L2:Q2')->applyFromArray([
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFFF00']],
+        ]);
+
+        // ER columns orange
+        $sheet->getStyle('R2:V2')->applyFromArray([
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFC000']],
+        ]);
+
+        // Result columns pink
+        $sheet->getStyle('W2:Y2')->applyFromArray([
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FF99CC']],
+        ]);
+
+        // Set column widths
+        $columnWidths = [
+            'A' => 5, 'B' => 25, 'C' => 20, 'D' => 22, 'E' => 18, 'F' => 18, 'G' => 18,
+            'H' => 18, 'I' => 18, 'J' => 15, 'K' => 15,
+            'L' => 20, 'M' => 18, 'N' => 15, 'O' => 18, 'P' => 18, 'Q' => 15,
+            'R' => 18, 'S' => 18, 'T' => 20, 'U' => 18, 'V' => 15,
+            'W' => 18, 'X' => 18, 'Y' => 20,
+        ];
+        foreach ($columnWidths as $col => $width) {
+            $sheet->getColumnDimension($col)->setWidth($width);
+        }
+
+        $sheet->getRowDimension(1)->setRowHeight(25);
+        $sheet->getRowDimension(2)->setRowHeight(40);
+
+        // Populate data
+        $dataRow = 3;
+        $no = 1;
+
+        foreach ($payslips as $payslip) {
+            $entry = $payslip->payrollEntry;
+            $employee = $payslip->employee;
+            $employeeRecord = $employee?->employee;
+
+            $basicSalary = $entry ? (float) $entry->basic_salary : 0;
+            $netPay = $entry ? (float) $entry->net_pay : 0;
+            $earningsBreakdown = $entry ? ($entry->earnings_breakdown ?? []) : [];
+            $deductionsBreakdown = $entry ? ($entry->deductions_breakdown ?? []) : [];
+
+            // Pay period
+            $payPeriod = '';
+            if ($payslip->pay_period_start && $payslip->pay_period_end) {
+                $payPeriod = $payslip->pay_period_start->format('d/m/Y') . ' - ' . $payslip->pay_period_end->format('d/m/Y');
+            }
+
+            // Initialize column values
+            $eeValues = [
+                'bpjs_social_security' => 0, 'bpjs_healthcare' => 0, 'pension' => 0,
+                'regular_income_tax' => 0, 'irregular_income_tax' => 0, 'expenses' => 0,
+            ];
+
+            $erValues = [
+                'regular_income_tax' => 0, 'irregular_income_tax' => 0,
+                'bpjs_social_security' => 0, 'bpjs_healthcare' => 0, 'pension' => 0,
+            ];
+
+            $earningValues = ['thr_pkwt' => 0, 'bonus' => 0];
+
+            // Map deductions
+            foreach ($deductionsBreakdown as $name => $amount) {
+                $lowerName = strtolower($name);
+                $amount = (float) $amount;
+
+                if (strpos($lowerName, 'bpjs') !== false && (strpos($lowerName, 'jht') !== false || strpos($lowerName, 'jkk') !== false || strpos($lowerName, 'jkm') !== false || strpos($lowerName, 'social') !== false || strpos($lowerName, 'ketenagakerjaan') !== false || strpos($lowerName, 'working') !== false)) {
+                    $eeValues['bpjs_social_security'] += $amount;
+                } elseif (strpos($lowerName, 'bpjs') !== false && (strpos($lowerName, 'health') !== false || strpos($lowerName, 'kesehatan') !== false || strpos($lowerName, 'healthcare') !== false)) {
+                    $eeValues['bpjs_healthcare'] += $amount;
+                } elseif (strpos($lowerName, 'pension') !== false || strpos($lowerName, 'pensiun') !== false || strpos($lowerName, 'jp ') !== false) {
+                    $eeValues['pension'] += $amount;
+                } elseif (strpos($lowerName, 'tax') !== false || strpos($lowerName, 'pph') !== false || strpos($lowerName, 'pajak') !== false) {
+                    if (strpos($lowerName, 'irregular') !== false || strpos($lowerName, 'tidak teratur') !== false) {
+                        $eeValues['irregular_income_tax'] += $amount;
+                    } else {
+                        $eeValues['regular_income_tax'] += $amount;
+                    }
+                } elseif (strpos($lowerName, 'expense') !== false || strpos($lowerName, 'biaya') !== false) {
+                    $eeValues['expenses'] += $amount;
+                } else {
+                    $eeValues['expenses'] += $amount;
+                }
+            }
+
+            // Map earnings
+            foreach ($earningsBreakdown as $name => $amount) {
+                $lowerName = strtolower($name);
+                $amount = (float) $amount;
+
+                if ($lowerName === 'basic salary') continue;
+
+                if (strpos($lowerName, 'thr') !== false || strpos($lowerName, 'pkwt') !== false) {
+                    $earningValues['thr_pkwt'] += $amount;
+                } elseif (strpos($lowerName, 'bonus') !== false || strpos($lowerName, 'insentif') !== false || strpos($lowerName, 'incentive') !== false) {
+                    $earningValues['bonus'] += $amount;
+                }
+            }
+
+            // Calculate totals
+            $totalEeDeductions = array_sum($eeValues);
+            $totalErContributions = array_sum($erValues);
+            $totalStatutoryAndTax = $totalEeDeductions + $totalErContributions;
+            $totalEmployerCost = $netPay + $totalStatutoryAndTax;
+
+            // Write row data
+            $sheet->setCellValue('A' . $dataRow, $no);
+            $sheet->setCellValue('B' . $dataRow, $employee?->name ?? '-');
+            $sheet->setCellValue('C' . $dataRow, $payslip->payslip_number ?? '-');
+            $sheet->setCellValue('D' . $dataRow, $payPeriod);
+            $sheet->setCellValue('E' . $dataRow, $employeeRecord?->branch?->name ?? '-');
+            $sheet->setCellValue('F' . $dataRow, $employeeRecord?->department?->name ?? '-');
+            $sheet->setCellValue('G' . $dataRow, $employeeRecord?->designation?->name ?? '-');
+            $sheet->setCellValue('H' . $dataRow, $basicSalary);
+            $sheet->setCellValue('I' . $dataRow, $basicSalary);
+            $sheet->setCellValue('J' . $dataRow, $earningValues['thr_pkwt'] ?: '-');
+            $sheet->setCellValue('K' . $dataRow, $earningValues['bonus'] ?: '-');
+            $sheet->setCellValue('L' . $dataRow, $eeValues['bpjs_social_security'] ?: '-');
+            $sheet->setCellValue('M' . $dataRow, $eeValues['bpjs_healthcare'] ?: '-');
+            $sheet->setCellValue('N' . $dataRow, $eeValues['pension'] ?: '-');
+            $sheet->setCellValue('O' . $dataRow, $eeValues['regular_income_tax'] ?: '-');
+            $sheet->setCellValue('P' . $dataRow, $eeValues['irregular_income_tax'] ?: '-');
+            $sheet->setCellValue('Q' . $dataRow, $eeValues['expenses'] ?: '-');
+            $sheet->setCellValue('R' . $dataRow, $erValues['regular_income_tax'] ?: '-');
+            $sheet->setCellValue('S' . $dataRow, $erValues['irregular_income_tax'] ?: '-');
+            $sheet->setCellValue('T' . $dataRow, $erValues['bpjs_social_security'] ?: '-');
+            $sheet->setCellValue('U' . $dataRow, $erValues['bpjs_healthcare'] ?: '-');
+            $sheet->setCellValue('V' . $dataRow, $erValues['pension'] ?: '-');
+            $sheet->setCellValue('W' . $dataRow, $netPay);
+            $sheet->setCellValue('X' . $dataRow, $totalStatutoryAndTax);
+            $sheet->setCellValue('Y' . $dataRow, $totalEmployerCost);
+
+            // Number format
+            foreach (range('H', 'Y') as $col) {
+                $cell = $sheet->getCell($col . $dataRow);
+                if (is_numeric($cell->getValue())) {
+                    $sheet->getStyle($col . $dataRow)->getNumberFormat()->setFormatCode('#,##0');
+                }
+            }
+
+            // Borders
+            $sheet->getStyle('A' . $dataRow . ':Y' . $dataRow)->applyFromArray([
+                'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+            ]);
+
+            $no++;
+            $dataRow++;
+        }
+
+        // Auto-filter
+        if ($dataRow > 3) {
+            $sheet->setAutoFilter('A2:Y' . ($dataRow - 1));
+        }
+
+        // Create response
+        $fileName = 'Payslips_' . date('Y-m-d_His') . '.xlsx';
+        $tempFile = tempnam(sys_get_temp_dir(), 'payslip_export_');
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($tempFile);
+
+        return response()->download($tempFile, $fileName, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
     }
 }
