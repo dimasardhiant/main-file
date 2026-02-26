@@ -135,6 +135,25 @@ export default function Payslips() {
     }
   });
 
+  // Add Export PDF button
+  pageActions.push({
+    label: t('Export PDF'),
+    icon: <FileText className="h-4 w-4 mr-2" />,
+    variant: 'outline' as const,
+    onClick: () => {
+      const params = new URLSearchParams();
+      if (searchTerm) params.append('search', searchTerm);
+      if (selectedEmployee && selectedEmployee !== 'all') params.append('employee_id', selectedEmployee);
+      if (selectedStatus && selectedStatus !== 'all') params.append('status', selectedStatus);
+      if (dateFrom) params.append('date_from', dateFrom);
+      if (dateTo) params.append('date_to', dateTo);
+      if (selectedBranch && selectedBranch !== 'all') params.append('branch', selectedBranch);
+      if (selectedDepartment && selectedDepartment !== 'all') params.append('department', selectedDepartment);
+      if (selectedDesignation && selectedDesignation !== 'all') params.append('designation', selectedDesignation);
+      window.location.href = route('hr.payslips.export-pdf') + '?' + params.toString();
+    }
+  });
+
   const breadcrumbs = [
     { title: t('Dashboard'), href: route('dashboard') },
     { title: t('Payroll Management'), href: route('hr.payslips.index') },

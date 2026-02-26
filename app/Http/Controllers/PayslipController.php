@@ -547,4 +547,173 @@ class PayslipController extends Controller
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ])->deleteFileAfterSend(true);
     }
+
+    /**
+     * Export payslips to PDF.
+     */
+    public function exportPdf(Request $request)
+    {
+        // Build query with same filters as index
+        $query = Payslip::with(['employee.employee.branch', 'employee.employee.department', 'employee.employee.designation', 'payrollEntry'])
+            ->where(function ($q) {
+                if (Auth::user()->can('manage-any-payslips')) {
+                    $q->whereIn('created_by', getCompanyAndUsersId());
+                } elseif (Auth::user()->can('manage-own-payslips')) {
+                    $q->orWhere('employee_id', Auth::id());
+                } else {
+                    $q->whereRaw('1 = 0');
+                }
+            });
+
+        if ($request->has('search') && !empty($request->search)) {
+            $query->where(function ($q) use ($request) {
+                $q->where('payslip_number', 'like', '%' . $request->search . '%')
+                    ->orWhereHas('employee', function ($subQ) use ($request) {
+                        $subQ->where('name', 'like', '%' . $request->search . '%');
+                    });
+            });
+        }
+        if ($request->has('employee_id') && !empty($request->employee_id) && $request->employee_id !== 'all') {
+            $query->where('employee_id', $request->employee_id);
+        }
+        if ($request->has('status') && !empty($request->status) && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+        if ($request->has('date_from') && !empty($request->date_from)) {
+            $query->where('pay_period_start', '>=', $request->date_from);
+        }
+        if ($request->has('date_to') && !empty($request->date_to)) {
+            $query->where('pay_period_end', '<=', $request->date_to);
+        }
+        if ($request->has('branch') && !empty($request->branch) && $request->branch !== 'all') {
+            $query->whereHas('employee.employee', function ($q) use ($request) {
+                $q->where('branch_id', $request->branch);
+            });
+        }
+        if ($request->has('department') && !empty($request->department) && $request->department !== 'all') {
+            $query->whereHas('employee.employee', function ($q) use ($request) {
+                $q->where('department_id', $request->department);
+            });
+        }
+        if ($request->has('designation') && !empty($request->designation) && $request->designation !== 'all') {
+            $query->whereHas('employee.employee', function ($q) use ($request) {
+                $q->where('designation_id', $request->designation);
+            });
+        }
+
+        $payslips = $query->orderBy('pay_date', 'desc')->get();
+
+        // Build data for PDF
+        $rows = [];
+        $no = 1;
+
+        foreach ($payslips as $payslip) {
+            $entry = $payslip->payrollEntry;
+            $employee = $payslip->employee;
+            $employeeRecord = $employee?->employee;
+
+            $basicSalary = $entry ? (float) $entry->basic_salary : 0;
+            $netPay = $entry ? (float) $entry->net_pay : 0;
+            $earningsBreakdown = $entry ? ($entry->earnings_breakdown ?? []) : [];
+            $deductionsBreakdown = $entry ? ($entry->deductions_breakdown ?? []) : [];
+
+            $payPeriod = '';
+            if ($payslip->pay_period_start && $payslip->pay_period_end) {
+                $payPeriod = $payslip->pay_period_start->format('d/m/Y') . ' - ' . $payslip->pay_period_end->format('d/m/Y');
+            }
+
+            $eeValues = [
+                'bpjs_social_security' => 0, 'bpjs_healthcare' => 0, 'pension' => 0,
+                'regular_income_tax' => 0, 'irregular_income_tax' => 0, 'expenses' => 0,
+            ];
+            $erValues = [
+                'regular_income_tax' => 0, 'irregular_income_tax' => 0,
+                'bpjs_social_security' => 0, 'bpjs_healthcare' => 0, 'pension' => 0,
+            ];
+            $earningValues = ['thr_pkwt' => 0, 'bonus' => 0];
+
+            foreach ($deductionsBreakdown as $name => $amount) {
+                $lowerName = strtolower($name);
+                $amount = (float) $amount;
+                if (strpos($lowerName, 'bpjs') !== false && (strpos($lowerName, 'jht') !== false || strpos($lowerName, 'jkk') !== false || strpos($lowerName, 'jkm') !== false || strpos($lowerName, 'social') !== false || strpos($lowerName, 'ketenagakerjaan') !== false || strpos($lowerName, 'working') !== false)) {
+                    $eeValues['bpjs_social_security'] += $amount;
+                } elseif (strpos($lowerName, 'bpjs') !== false && (strpos($lowerName, 'health') !== false || strpos($lowerName, 'kesehatan') !== false || strpos($lowerName, 'healthcare') !== false)) {
+                    $eeValues['bpjs_healthcare'] += $amount;
+                } elseif (strpos($lowerName, 'pension') !== false || strpos($lowerName, 'pensiun') !== false || strpos($lowerName, 'jp ') !== false) {
+                    $eeValues['pension'] += $amount;
+                } elseif (strpos($lowerName, 'tax') !== false || strpos($lowerName, 'pph') !== false || strpos($lowerName, 'pajak') !== false) {
+                    if (strpos($lowerName, 'irregular') !== false || strpos($lowerName, 'tidak teratur') !== false) {
+                        $eeValues['irregular_income_tax'] += $amount;
+                    } else {
+                        $eeValues['regular_income_tax'] += $amount;
+                    }
+                } elseif (strpos($lowerName, 'expense') !== false || strpos($lowerName, 'biaya') !== false) {
+                    $eeValues['expenses'] += $amount;
+                } else {
+                    $eeValues['expenses'] += $amount;
+                }
+            }
+
+            foreach ($earningsBreakdown as $name => $amount) {
+                $lowerName = strtolower($name);
+                $amount = (float) $amount;
+                if ($lowerName === 'basic salary') continue;
+                if (strpos($lowerName, 'thr') !== false || strpos($lowerName, 'pkwt') !== false) {
+                    $earningValues['thr_pkwt'] += $amount;
+                } elseif (strpos($lowerName, 'bonus') !== false || strpos($lowerName, 'insentif') !== false || strpos($lowerName, 'incentive') !== false) {
+                    $earningValues['bonus'] += $amount;
+                }
+            }
+
+            $totalEeDeductions = array_sum($eeValues);
+            $totalErContributions = array_sum($erValues);
+            $totalStatutoryAndTax = $totalEeDeductions + $totalErContributions;
+            $totalEmployerCost = $netPay + $totalStatutoryAndTax;
+
+            $rows[] = [
+                'no' => $no,
+                'employee_name' => $employee?->name ?? '-',
+                'payslip_number' => $payslip->payslip_number ?? '-',
+                'pay_period' => $payPeriod,
+                'branch' => $employeeRecord?->branch?->name ?? '-',
+                'department' => $employeeRecord?->department?->name ?? '-',
+                'designation' => $employeeRecord?->designation?->name ?? '-',
+                'basic_salary' => $basicSalary,
+                'monthly_salary' => $basicSalary,
+                'thr_pkwt' => $earningValues['thr_pkwt'],
+                'bonus' => $earningValues['bonus'],
+                'ee_bpjs_social' => $eeValues['bpjs_social_security'],
+                'ee_bpjs_health' => $eeValues['bpjs_healthcare'],
+                'ee_pension' => $eeValues['pension'],
+                'ee_regular_tax' => $eeValues['regular_income_tax'],
+                'ee_irregular_tax' => $eeValues['irregular_income_tax'],
+                'ee_expenses' => $eeValues['expenses'],
+                'er_regular_tax' => $erValues['regular_income_tax'],
+                'er_irregular_tax' => $erValues['irregular_income_tax'],
+                'er_bpjs_social' => $erValues['bpjs_social_security'],
+                'er_bpjs_health' => $erValues['bpjs_healthcare'],
+                'er_pension' => $erValues['pension'],
+                'net_pay' => $netPay,
+                'total_statutory_tax' => $totalStatutoryAndTax,
+                'total_employer_cost' => $totalEmployerCost,
+            ];
+
+            $no++;
+        }
+
+        $companySettings = settings();
+
+        $html = view('payslips.export-pdf', [
+            'rows' => $rows,
+            'companyName' => $companySettings['company_name'] ?? 'Company',
+            'exportDate' => now()->format('d/m/Y H:i'),
+        ])->render();
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)
+            ->setPaper('a3', 'landscape');
+
+        $fileName = 'Payslips_' . date('Y-m-d_His') . '.pdf';
+
+        return $pdf->download($fileName);
+    }
 }
