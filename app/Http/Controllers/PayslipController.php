@@ -7,6 +7,7 @@ use App\Models\Department;
 use App\Models\Designation;
 use App\Models\Payslip;
 use App\Models\PayrollEntry;
+use App\Models\PayrollRun;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -61,6 +62,13 @@ class PayslipController extends Controller
                 $query->where('pay_period_end', '<=', $request->date_to);
             }
 
+            // Handle payroll run filter
+            if ($request->has('payroll_run_id') && !empty($request->payroll_run_id) && $request->payroll_run_id !== 'all') {
+                $query->whereHas('payrollEntry', function ($q) use ($request) {
+                    $q->where('payroll_run_id', $request->payroll_run_id);
+                });
+            }
+
             // Handle branch filter
             if ($request->has('branch') && !empty($request->branch) && $request->branch !== 'all') {
                 $query->whereHas('employee.employee', function ($q) use ($request) {
@@ -111,13 +119,20 @@ class PayslipController extends Controller
                 ->where('status', 'active')
                 ->get(['id', 'name', 'department_id']);
 
+            // Get payroll runs for filter dropdown
+            $payrollRuns = PayrollRun::whereIn('created_by', getCompanyAndUsersId())
+                ->where('status', 'completed')
+                ->orderBy('pay_period_start', 'desc')
+                ->get(['id', 'title', 'pay_period_start', 'pay_period_end']);
+
             return Inertia::render('hr/payslips/index', [
                 'payslips' => $payslips,
                 'employees' => $employees,
                 'branches' => $branches,
                 'departments' => $departments,
                 'designations' => $designations,
-                'filters' => $request->all(['search', 'employee_id', 'status', 'date_from', 'date_to', 'branch', 'department', 'designation', 'sort_field', 'sort_direction', 'per_page']),
+                'payrollRuns' => $payrollRuns,
+                'filters' => $request->all(['search', 'employee_id', 'status', 'date_from', 'date_to', 'branch', 'department', 'designation', 'payroll_run_id', 'sort_field', 'sort_direction', 'per_page']),
             ]);
         } else {
             return redirect()->back()->with('error', __('Permission Denied.'));
@@ -315,6 +330,13 @@ class PayslipController extends Controller
             });
         }
 
+        // Handle payroll run filter
+        if ($request->has('payroll_run_id') && !empty($request->payroll_run_id) && $request->payroll_run_id !== 'all') {
+            $query->whereHas('payrollEntry', function ($q) use ($request) {
+                $q->where('payroll_run_id', $request->payroll_run_id);
+            });
+        }
+
         $payslips = $query->orderBy('pay_date', 'desc')->get();
 
         // Create spreadsheet
@@ -443,16 +465,34 @@ class PayslipController extends Controller
 
             $earningValues = ['thr_pkwt' => 0, 'bonus' => 0];
 
-            // Map deductions
+            // Map deductions and ER contributions from the combined array
             foreach ($deductionsBreakdown as $name => $amount) {
                 $lowerName = strtolower($name);
                 $amount = (float) $amount;
+
+                // Check if this is an ER Contribution
+                if (strpos($name, 'ER_') === 0) {
+                    if (strpos($lowerName, 'bpjs_kesehatan') !== false) {
+                        $erValues['bpjs_healthcare'] += $amount;
+                    } elseif (strpos($lowerName, 'bpjs_jht') !== false || strpos($lowerName, 'bpjs_jkk') !== false || strpos($lowerName, 'bpjs_jkm') !== false) {
+                        $erValues['bpjs_social_security'] += $amount;
+                    } elseif (strpos($lowerName, 'bpjs_jp') !== false) {
+                        $erValues['pension'] += $amount;
+                    } elseif (strpos($lowerName, 'tax') !== false || strpos($lowerName, 'pph') !== false) {
+                        if (strpos($lowerName, 'irregular') !== false) {
+                            $erValues['irregular_income_tax'] += $amount;
+                        } else {
+                            $erValues['regular_income_tax'] += $amount;
+                        }
+                    }
+                    continue; // Skip the rest of the EE logic for ER items
+                }
 
                 if (strpos($lowerName, 'bpjs') !== false && (strpos($lowerName, 'jht') !== false || strpos($lowerName, 'jkk') !== false || strpos($lowerName, 'jkm') !== false || strpos($lowerName, 'social') !== false || strpos($lowerName, 'ketenagakerjaan') !== false || strpos($lowerName, 'working') !== false)) {
                     $eeValues['bpjs_social_security'] += $amount;
                 } elseif (strpos($lowerName, 'bpjs') !== false && (strpos($lowerName, 'health') !== false || strpos($lowerName, 'kesehatan') !== false || strpos($lowerName, 'healthcare') !== false)) {
                     $eeValues['bpjs_healthcare'] += $amount;
-                } elseif (strpos($lowerName, 'pension') !== false || strpos($lowerName, 'pensiun') !== false || strpos($lowerName, 'jp ') !== false) {
+                } elseif (strpos($lowerName, 'pension') !== false || strpos($lowerName, 'pensiun') !== false || strpos($lowerName, 'jp') !== false) {
                     $eeValues['pension'] += $amount;
                 } elseif (strpos($lowerName, 'tax') !== false || strpos($lowerName, 'pph') !== false || strpos($lowerName, 'pajak') !== false) {
                     if (strpos($lowerName, 'irregular') !== false || strpos($lowerName, 'tidak teratur') !== false) {
@@ -601,6 +641,13 @@ class PayslipController extends Controller
             });
         }
 
+        // Handle payroll run filter
+        if ($request->has('payroll_run_id') && !empty($request->payroll_run_id) && $request->payroll_run_id !== 'all') {
+            $query->whereHas('payrollEntry', function ($q) use ($request) {
+                $q->where('payroll_run_id', $request->payroll_run_id);
+            });
+        }
+
         $payslips = $query->orderBy('pay_date', 'desc')->get();
 
         // Build data for PDF
@@ -635,11 +682,30 @@ class PayslipController extends Controller
             foreach ($deductionsBreakdown as $name => $amount) {
                 $lowerName = strtolower($name);
                 $amount = (float) $amount;
+
+                // Check if this is an ER Contribution
+                if (strpos($name, 'ER_') === 0) {
+                    if (strpos($lowerName, 'bpjs_kesehatan') !== false) {
+                        $erValues['bpjs_healthcare'] += $amount;
+                    } elseif (strpos($lowerName, 'bpjs_jht') !== false || strpos($lowerName, 'bpjs_jkk') !== false || strpos($lowerName, 'bpjs_jkm') !== false) {
+                        $erValues['bpjs_social_security'] += $amount;
+                    } elseif (strpos($lowerName, 'bpjs_jp') !== false) {
+                        $erValues['pension'] += $amount;
+                    } elseif (strpos($lowerName, 'tax') !== false || strpos($lowerName, 'pph') !== false) {
+                        if (strpos($lowerName, 'irregular') !== false) {
+                            $erValues['irregular_income_tax'] += $amount;
+                        } else {
+                            $erValues['regular_income_tax'] += $amount;
+                        }
+                    }
+                    continue; // Skip the rest of the EE logic for ER items
+                }
+
                 if (strpos($lowerName, 'bpjs') !== false && (strpos($lowerName, 'jht') !== false || strpos($lowerName, 'jkk') !== false || strpos($lowerName, 'jkm') !== false || strpos($lowerName, 'social') !== false || strpos($lowerName, 'ketenagakerjaan') !== false || strpos($lowerName, 'working') !== false)) {
                     $eeValues['bpjs_social_security'] += $amount;
                 } elseif (strpos($lowerName, 'bpjs') !== false && (strpos($lowerName, 'health') !== false || strpos($lowerName, 'kesehatan') !== false || strpos($lowerName, 'healthcare') !== false)) {
                     $eeValues['bpjs_healthcare'] += $amount;
-                } elseif (strpos($lowerName, 'pension') !== false || strpos($lowerName, 'pensiun') !== false || strpos($lowerName, 'jp ') !== false) {
+                } elseif (strpos($lowerName, 'pension') !== false || strpos($lowerName, 'pensiun') !== false || strpos($lowerName, 'jp') !== false) {
                     $eeValues['pension'] += $amount;
                 } elseif (strpos($lowerName, 'tax') !== false || strpos($lowerName, 'pph') !== false || strpos($lowerName, 'pajak') !== false) {
                     if (strpos($lowerName, 'irregular') !== false || strpos($lowerName, 'tidak teratur') !== false) {

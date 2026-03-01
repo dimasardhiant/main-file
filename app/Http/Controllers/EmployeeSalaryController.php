@@ -733,15 +733,34 @@ class EmployeeSalaryController extends Controller
                 'bonus' => 0,
             ];
 
-            // Map deductions to EE columns by pattern matching
+            // Map deductions and ER contributions from the combined array
             foreach ($calculation['deductions'] as $name => $amount) {
                 $lowerName = strtolower($name);
 
+                // Check if this is an ER Contribution
+                if (strpos($name, 'ER_') === 0) {
+                    if (strpos($lowerName, 'bpjs_kesehatan') !== false) {
+                        $erValues['bpjs_healthcare'] += $amount;
+                    } elseif (strpos($lowerName, 'bpjs_jht') !== false || strpos($lowerName, 'bpjs_jkk') !== false || strpos($lowerName, 'bpjs_jkm') !== false) {
+                        $erValues['bpjs_social_security'] += $amount;
+                    } elseif (strpos($lowerName, 'bpjs_jp') !== false) {
+                        $erValues['pension'] += $amount;
+                    } elseif (strpos($lowerName, 'tax') !== false || strpos($lowerName, 'pph') !== false) {
+                        if (strpos($lowerName, 'irregular') !== false) {
+                            $erValues['irregular_income_tax'] += $amount;
+                        } else {
+                            $erValues['regular_income_tax'] += $amount;
+                        }
+                    }
+                    continue; // Skip the rest of the EE logic for ER items
+                }
+
+                // If it's not ER_, it's an EE Deduction
                 if (strpos($lowerName, 'bpjs') !== false && (strpos($lowerName, 'jht') !== false || strpos($lowerName, 'jkk') !== false || strpos($lowerName, 'jkm') !== false || strpos($lowerName, 'social') !== false || strpos($lowerName, 'ketenagakerjaan') !== false || strpos($lowerName, 'working') !== false)) {
                     $eeValues['bpjs_social_security'] += $amount;
                 } elseif (strpos($lowerName, 'bpjs') !== false && (strpos($lowerName, 'health') !== false || strpos($lowerName, 'kesehatan') !== false || strpos($lowerName, 'healthcare') !== false)) {
                     $eeValues['bpjs_healthcare'] += $amount;
-                } elseif (strpos($lowerName, 'pension') !== false || strpos($lowerName, 'pensiun') !== false || strpos($lowerName, 'jp ') !== false) {
+                } elseif (strpos($lowerName, 'pension') !== false || strpos($lowerName, 'pensiun') !== false || strpos($lowerName, 'jp') !== false) {
                     $eeValues['pension'] += $amount;
                 } elseif (strpos($lowerName, 'tax') !== false || strpos($lowerName, 'pph') !== false || strpos($lowerName, 'pajak') !== false) {
                     if (strpos($lowerName, 'irregular') !== false || strpos($lowerName, 'tidak teratur') !== false) {

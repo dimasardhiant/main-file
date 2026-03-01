@@ -132,10 +132,55 @@ class EmployeeSalary extends BaseModel
             }
         }
 
+        // --- Indonesian BPJS Statutory Calculations ---
+        $basicSalary = $this->basic_salary;
+
+        // Caps
+        $bpjsKesehatanCap = 12000000; // 12 Juta
+        $bpjsJpCap = 10042300; // Approx 10 Juta for JP
+
+        // Basis for calculation
+        $basisKesehatan = min($basicSalary, $bpjsKesehatanCap);
+        $basisJp = min($basicSalary, $bpjsJpCap);
+
+        // 1. BPJS Kesehatan (1% EE, 4% ER)
+        $eeBpjsKes = $basisKesehatan * 0.01;
+        $erBpjsKes = $basisKesehatan * 0.04;
+
+        // 2. BPJS Ketenagakerjaan - JHT (Jaminan Hari Tua) (2% EE, 3.7% ER)
+        $eeJht = $basicSalary * 0.02;
+        $erJht = $basicSalary * 0.037;
+
+        // 3. BPJS Ketenagakerjaan - JP (Jaminan Pensiun) (1% EE, 2% ER)
+        $eeJp = $basisJp * 0.01;
+        $erJp = $basisJp * 0.02;
+
+        // 4. BPJS Ketenagakerjaan - JKK (Jaminan Kecelakaan Kerja) (0.24% ER - Defaulting to low risk)
+        $erJkk = $basicSalary * 0.0024;
+
+        // 5. BPJS Ketenagakerjaan - JKM (Jaminan Kematian) (0.3% ER)
+        $erJkm = $basicSalary * 0.003;
+
+        // Append to Employee Deductions (reduces Net Pay)
+        $deductions['BPJS Kesehatan (1%)'] = $eeBpjsKes;
+        $deductions['BPJS JHT (2%)'] = $eeJht;
+        $deductions['BPJS JP (1%)'] = $eeJp;
+        $totalDeductions += ($eeBpjsKes + $eeJht + $eeJp);
+
+        // Store Employer Contributions (does NOT reduce Net Pay)
+        $employerContributions = [
+            'ER_BPJS_Kesehatan_(4%)' => $erBpjsKes,
+            'ER_BPJS_JHT_(3.7%)' => $erJht,
+            'ER_BPJS_JP_(2%)' => $erJp,
+            'ER_BPJS_JKK_(0.24%)' => $erJkk,
+            'ER_BPJS_JKM_(0.3%)' => $erJkm,
+        ];
+
         return [
             'basic_salary' => $this->basic_salary,
             'earnings' => $earnings,
             'deductions' => $deductions,
+            'employer_contributions' => $employerContributions,
             'total_earnings' => $totalEarnings,
             'total_deductions' => $totalDeductions,
             'gross_salary' => $totalEarnings,

@@ -207,7 +207,9 @@ class PayrollRun extends BaseModel
             'per_day_salary' => $perDaySalary,
             'unpaid_leave_deduction' => $unpaidLeaveDeduction,
             'earnings_breakdown' => $salaryBreakdown['earnings'],
-            'deductions_breakdown' => $salaryBreakdown['deductions'],
+            // Merge actual deductions with ER Contributions so we have a record, but 
+            // since total_deductions was calculated above BEFORE the merge, ER costs won't reduce Net Pay
+            'deductions_breakdown' => array_merge($salaryBreakdown['deductions'], $salaryBreakdown['employer_contributions'] ?? []),
             'created_by' => $this->created_by,
         ]);
     }
