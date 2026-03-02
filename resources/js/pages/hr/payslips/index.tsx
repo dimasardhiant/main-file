@@ -1,5 +1,6 @@
 // pages/hr/payslips/index.tsx
-import { useState } from 'react';
+import React, { useState } from 'react';
+import { format } from 'date-fns';
 import { PageTemplate, PageAction } from '@/components/page-template';
 import { usePage, router } from '@inertiajs/react';
 import { Plus, Download, FileText } from 'lucide-react';
@@ -9,10 +10,12 @@ import { toast } from '@/components/custom-toast';
 import { useTranslation } from 'react-i18next';
 import { Pagination } from '@/components/ui/pagination';
 import { SearchAndFilterBar } from '@/components/ui/search-and-filter-bar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 
 export default function Payslips() {
   const { t } = useTranslation();
-  const { auth, payslips, employees, branches, departments, designations, filters: pageFilters = {} } = usePage().props as any;
+  const { auth, payslips, employees, branches, departments, designations, payrollRuns, filters: pageFilters = {} } = usePage().props as any;
   const permissions = auth?.permissions || [];
 
   // State
@@ -24,21 +27,78 @@ export default function Payslips() {
   const [selectedBranch, setSelectedBranch] = useState(pageFilters.branch || 'all');
   const [selectedDepartment, setSelectedDepartment] = useState(pageFilters.department || 'all');
   const [selectedDesignation, setSelectedDesignation] = useState(pageFilters.designation || 'all');
+  const [selectedPayrollRun, setSelectedPayrollRun] = useState(pageFilters.payroll_run_id || 'all');
   const [showFilters, setShowFilters] = useState(false);
 
   // Check if any filters are active
   const hasActiveFilters = () => {
-    return searchTerm !== '' || selectedEmployee !== 'all' || selectedStatus !== 'all' || dateFrom !== '' || dateTo !== '' || selectedBranch !== 'all' || selectedDepartment !== 'all' || selectedDesignation !== 'all';
+    return searchTerm !== '' || selectedEmployee !== 'all' || selectedStatus !== 'all' || dateFrom !== '' || dateTo !== '' || selectedBranch !== 'all' || selectedDepartment !== 'all' || selectedDesignation !== 'all' || selectedPayrollRun !== 'all';
   };
 
   // Count active filters
   const activeFilterCount = () => {
-    return (searchTerm ? 1 : 0) + (selectedEmployee !== 'all' ? 1 : 0) + (selectedStatus !== 'all' ? 1 : 0) + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (selectedBranch !== 'all' ? 1 : 0) + (selectedDepartment !== 'all' ? 1 : 0) + (selectedDesignation !== 'all' ? 1 : 0);
+    return (searchTerm ? 1 : 0) + (selectedEmployee !== 'all' ? 1 : 0) + (selectedStatus !== 'all' ? 1 : 0) + (dateFrom ? 1 : 0) + (dateTo ? 1 : 0) + (selectedBranch !== 'all' ? 1 : 0) + (selectedDepartment !== 'all' ? 1 : 0) + (selectedDesignation !== 'all' ? 1 : 0) + (selectedPayrollRun !== 'all' ? 1 : 0);
   };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     applyFilters();
+  };
+
+  const formatDate = (date: Date | string | null | undefined): string | undefined => {
+    if (!date) return undefined;
+    try {
+      const d = typeof date === 'string' ? new Date(date) : date;
+      if (isNaN(d.getTime())) return undefined;
+      return format(d, 'yyyy-MM-dd');
+    } catch (e) {
+      return undefined;
+    }
+  };
+
+  // Handle payroll run selector change - immediately apply filter
+  const handlePayrollRunChange = (value: string) => {
+    setSelectedPayrollRun(value);
+
+    // Clear custom date filters when a payroll run is selected
+    if (value !== 'all') {
+      setDateFrom('');
+      setDateTo('');
+    }
+
+    router.get(route('hr.payslips.index'), {
+      page: 1,
+      search: searchTerm || undefined,
+      employee_id: selectedEmployee !== 'all' ? selectedEmployee : undefined,
+      status: selectedStatus !== 'all' ? selectedStatus : undefined,
+      date_from: undefined, // Cleared
+      date_to: undefined,   // Cleared
+      branch: selectedBranch !== 'all' ? selectedBranch : undefined,
+      department: selectedDepartment !== 'all' ? selectedDepartment : undefined,
+      designation: selectedDesignation !== 'all' ? selectedDesignation : undefined,
+      payroll_run_id: value !== 'all' ? value : undefined,
+      per_page: pageFilters.per_page
+    }, { preserveState: true, preserveScroll: true });
+  };
+
+  const handleDateFromChange = (date: Date | undefined) => {
+    const formattedDate = formatDate(date);
+    setDateFrom(formattedDate || '');
+
+    // Clear payroll run filter when custom date is selected
+    if (formattedDate) {
+      setSelectedPayrollRun('all');
+    }
+  };
+
+  const handleDateToChange = (date: Date | undefined) => {
+    const formattedDate = formatDate(date);
+    setDateTo(formattedDate || '');
+
+    // Clear payroll run filter when custom date is selected
+    if (formattedDate) {
+      setSelectedPayrollRun('all');
+    }
   };
 
   const applyFilters = () => {
@@ -47,11 +107,12 @@ export default function Payslips() {
       search: searchTerm || undefined,
       employee_id: selectedEmployee !== 'all' ? selectedEmployee : undefined,
       status: selectedStatus !== 'all' ? selectedStatus : undefined,
-      date_from: dateFrom || undefined,
-      date_to: dateTo || undefined,
+      date_from: formatDate(dateFrom) || undefined,
+      date_to: formatDate(dateTo) || undefined,
       branch: selectedBranch !== 'all' ? selectedBranch : undefined,
       department: selectedDepartment !== 'all' ? selectedDepartment : undefined,
       designation: selectedDesignation !== 'all' ? selectedDesignation : undefined,
+      payroll_run_id: selectedPayrollRun !== 'all' ? selectedPayrollRun : undefined,
       per_page: pageFilters.per_page
     }, { preserveState: true, preserveScroll: true });
   };
@@ -71,6 +132,7 @@ export default function Payslips() {
       branch: selectedBranch !== 'all' ? selectedBranch : undefined,
       department: selectedDepartment !== 'all' ? selectedDepartment : undefined,
       designation: selectedDesignation !== 'all' ? selectedDesignation : undefined,
+      payroll_run_id: selectedPayrollRun !== 'all' ? selectedPayrollRun : undefined,
       per_page: pageFilters.per_page
     }, { preserveState: true, preserveScroll: true });
   };
@@ -105,6 +167,7 @@ export default function Payslips() {
     setSelectedBranch('all');
     setSelectedDepartment('all');
     setSelectedDesignation('all');
+    setSelectedPayrollRun('all');
     setShowFilters(false);
 
     router.get(route('hr.payslips.index'), {
@@ -126,11 +189,12 @@ export default function Payslips() {
       if (searchTerm) params.append('search', searchTerm);
       if (selectedEmployee && selectedEmployee !== 'all') params.append('employee_id', selectedEmployee);
       if (selectedStatus && selectedStatus !== 'all') params.append('status', selectedStatus);
-      if (dateFrom) params.append('date_from', dateFrom);
-      if (dateTo) params.append('date_to', dateTo);
+      if (dateFrom) params.append('date_from', formatDate(dateFrom)!);
+      if (dateTo) params.append('date_to', formatDate(dateTo)!);
       if (selectedBranch && selectedBranch !== 'all') params.append('branch', selectedBranch);
       if (selectedDepartment && selectedDepartment !== 'all') params.append('department', selectedDepartment);
       if (selectedDesignation && selectedDesignation !== 'all') params.append('designation', selectedDesignation);
+      if (selectedPayrollRun && selectedPayrollRun !== 'all') params.append('payroll_run_id', selectedPayrollRun);
       window.location.href = route('hr.payslips.export-excel') + '?' + params.toString();
     }
   });
@@ -145,11 +209,12 @@ export default function Payslips() {
       if (searchTerm) params.append('search', searchTerm);
       if (selectedEmployee && selectedEmployee !== 'all') params.append('employee_id', selectedEmployee);
       if (selectedStatus && selectedStatus !== 'all') params.append('status', selectedStatus);
-      if (dateFrom) params.append('date_from', dateFrom);
-      if (dateTo) params.append('date_to', dateTo);
+      if (dateFrom) params.append('date_from', formatDate(dateFrom)!);
+      if (dateTo) params.append('date_to', formatDate(dateTo)!);
       if (selectedBranch && selectedBranch !== 'all') params.append('branch', selectedBranch);
       if (selectedDepartment && selectedDepartment !== 'all') params.append('department', selectedDepartment);
       if (selectedDesignation && selectedDesignation !== 'all') params.append('designation', selectedDesignation);
+      if (selectedPayrollRun && selectedPayrollRun !== 'all') params.append('payroll_run_id', selectedPayrollRun);
       window.location.href = route('hr.payslips.export-pdf') + '?' + params.toString();
     }
   });
@@ -275,6 +340,14 @@ export default function Payslips() {
     }))
   ];
 
+  const payrollRunOptions = [
+    { value: 'all', label: t('All Payroll Runs') },
+    ...(payrollRuns || []).map((pr: any) => ({
+      value: pr.id.toString(),
+      label: pr.title
+    }))
+  ];
+
   return (
     <PageTemplate
       title={t("Payslips")}
@@ -284,6 +357,25 @@ export default function Payslips() {
       breadcrumbs={breadcrumbs}
       noPadding
     >
+      {/* Payroll Run Selector - always visible */}
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow mb-4 p-4">
+        <div className="flex items-center gap-4">
+          <Label className="text-sm font-medium whitespace-nowrap">{t('Payroll Run')}:</Label>
+          <Select value={selectedPayrollRun} onValueChange={handlePayrollRunChange}>
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder={t('All Payroll Runs')} />
+            </SelectTrigger>
+            <SelectContent>
+              {payrollRunOptions.map((option: any) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       {/* Search and filters section */}
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow mb-4 p-4">
         <SearchAndFilterBar
@@ -338,15 +430,15 @@ export default function Payslips() {
               name: 'date_from',
               label: t('Period From'),
               type: 'date',
-              value: dateFrom,
-              onChange: setDateFrom
+              value: dateFrom ? new Date(dateFrom) : undefined,
+              onChange: handleDateFromChange
             },
             {
               name: 'date_to',
               label: t('Period To'),
               type: 'date',
-              value: dateTo,
-              onChange: setDateTo
+              value: dateTo ? new Date(dateTo) : undefined,
+              onChange: handleDateToChange
             }
           ]}
           showFilters={showFilters}
@@ -367,7 +459,8 @@ export default function Payslips() {
               date_to: dateTo || undefined,
               branch: selectedBranch !== 'all' ? selectedBranch : undefined,
               department: selectedDepartment !== 'all' ? selectedDepartment : undefined,
-              designation: selectedDesignation !== 'all' ? selectedDesignation : undefined
+              designation: selectedDesignation !== 'all' ? selectedDesignation : undefined,
+              payroll_run_id: selectedPayrollRun !== 'all' ? selectedPayrollRun : undefined
             }, { preserveState: true, preserveScroll: true });
           }}
         />
