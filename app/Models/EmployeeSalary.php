@@ -135,9 +135,13 @@ class EmployeeSalary extends BaseModel
         // --- Indonesian BPJS Statutory Calculations ---
         $basicSalary = $this->basic_salary;
 
-        // Caps
-        $bpjsKesehatanCap = 12000000; // 12 Juta
-        $bpjsJpCap = 10042300; // Approx 10 Juta for JP
+        // Caps - fetch from settings or use default
+        $companyId = $this->creator ? $this->creator->company_id : ($this->employee ? $this->employee->company_id : auth()->id());
+        $bpjsKesehatanCap = getSetting('bpjsKesehatanCap', $companyId);
+        $bpjsKesehatanCap = $bpjsKesehatanCap ? (float) $bpjsKesehatanCap : 12000000;
+
+        $bpjsJpCap = getSetting('bpjsJpCap', $companyId);
+        $bpjsJpCap = $bpjsJpCap ? (float) $bpjsJpCap : 10042300;
 
         // Basis for calculation
         $basisKesehatan = min($basicSalary, $bpjsKesehatanCap);

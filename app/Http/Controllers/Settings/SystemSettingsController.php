@@ -23,6 +23,8 @@ class SystemSettingsController extends Controller
                 'emailVerification' => 'boolean',
                 'landingPageEnabled' => 'boolean',
                 'ipRestrictionEnabled'  => 'boolean',
+                'bpjsKesehatanCap' => 'nullable|numeric|min:0',
+                'bpjsJpCap' => 'nullable|numeric|min:0',
             ];
 
             if(isSaaS()){

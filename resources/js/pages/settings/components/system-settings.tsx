@@ -39,7 +39,9 @@ export default function SystemSettings({
     emailVerification: false,
     landingPageEnabled: true,
     ipRestrictionEnabled: false,
-    termsConditionsUrl: ''
+    termsConditionsUrl: '',
+    bpjsKesehatanCap: '12000000',
+    bpjsJpCap: '10042300'
   };
 
   // Combine settings from props and page props
@@ -58,7 +60,9 @@ export default function SystemSettings({
     emailVerification: settingsData.emailVerification === 'true' || settingsData.emailVerification === true || defaultSettings.emailVerification,
     landingPageEnabled: settingsData.landingPageEnabled === 'true' || settingsData.landingPageEnabled === true || settingsData.landingPageEnabled === '1' || (settingsData.landingPageEnabled === undefined ? defaultSettings.landingPageEnabled : false),
     ipRestrictionEnabled: settingsData.ipRestrictionEnabled === '1' || settingsData.ipRestrictionEnabled === 1 || defaultSettings.ipRestrictionEnabled,
-    termsConditionsUrl: settingsData.termsConditionsUrl || defaultSettings.termsConditionsUrl
+    termsConditionsUrl: settingsData.termsConditionsUrl || defaultSettings.termsConditionsUrl,
+    bpjsKesehatanCap: settingsData.bpjsKesehatanCap || defaultSettings.bpjsKesehatanCap,
+    bpjsJpCap: settingsData.bpjsJpCap || defaultSettings.bpjsJpCap
   }));
 
   // Update state when settings change
@@ -76,7 +80,9 @@ export default function SystemSettings({
         emailVerification: mergedSettings.emailVerification === 'true' || mergedSettings.emailVerification === true || mergedSettings.emailVerification === '1',
         landingPageEnabled: mergedSettings.landingPageEnabled === 'true' || mergedSettings.landingPageEnabled === true || mergedSettings.landingPageEnabled === '1' || (mergedSettings.landingPageEnabled === undefined ? defaultSettings.landingPageEnabled : false),
         ipRestrictionEnabled: mergedSettings.ipRestrictionEnabled === '1' || mergedSettings.ipRestrictionEnabled === 1 || false,
-        termsConditionsUrl: mergedSettings.termsConditionsUrl || defaultSettings.termsConditionsUrl
+        termsConditionsUrl: mergedSettings.termsConditionsUrl || defaultSettings.termsConditionsUrl,
+        bpjsKesehatanCap: mergedSettings.bpjsKesehatanCap || defaultSettings.bpjsKesehatanCap,
+        bpjsJpCap: mergedSettings.bpjsJpCap || defaultSettings.bpjsJpCap
       }));
     }
   }, [settingsData]);
@@ -104,7 +110,9 @@ export default function SystemSettings({
       emailVerification: Boolean(systemSettings.emailVerification),
       landingPageEnabled: Boolean(systemSettings.landingPageEnabled),
       ipRestrictionEnabled: systemSettings.ipRestrictionEnabled ? 1 : 0,
-      termsConditionsUrl: systemSettings.termsConditionsUrl
+      termsConditionsUrl: systemSettings.termsConditionsUrl,
+      bpjsKesehatanCap: systemSettings.bpjsKesehatanCap,
+      bpjsJpCap: systemSettings.bpjsJpCap
     };
 
     // Only include email verification and landing page for non-company users
@@ -112,7 +120,7 @@ export default function SystemSettings({
       cleanSettings.emailVerification = Boolean(systemSettings.emailVerification);
       cleanSettings.landingPageEnabled = Boolean(systemSettings.landingPageEnabled);
     }
-    
+
     // IP Restriction is available for company users
     if (isCompanyUser) {
       cleanSettings.ipRestrictionEnabled = systemSettings.ipRestrictionEnabled ? 1 : 0;
@@ -388,6 +396,37 @@ export default function SystemSettings({
                     checked={systemSettings.ipRestrictionEnabled}
                     onCheckedChange={(checked) => handleSystemSettingsChange('ipRestrictionEnabled', checked)}
                   />
+                </div>
+              </div>
+
+              <div className="grid gap-2 md:col-span-2 mt-4 pt-4 border-t">
+                <h3 className="text-lg font-medium">{t("BPJS Configuration")}</h3>
+                <p className="text-sm text-muted-foreground mb-2">
+                  {t("Configure salary limits for BPJS deduction calculations")}
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="bpjsKesehatanCap">{t("Max Salary Basis (BPJS Kesehatan)")}</Label>
+                    <Input
+                      id="bpjsKesehatanCap"
+                      type="number"
+                      min="0"
+                      value={systemSettings.bpjsKesehatanCap}
+                      onChange={(e) => handleSystemSettingsChange('bpjsKesehatanCap', e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">{t("Default: 12000000")}</p>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="bpjsJpCap">{t("Max Salary Basis (BPJS JP)")}</Label>
+                    <Input
+                      id="bpjsJpCap"
+                      type="number"
+                      min="0"
+                      value={systemSettings.bpjsJpCap}
+                      onChange={(e) => handleSystemSettingsChange('bpjsJpCap', e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">{t("Default: 10042300")}</p>
+                  </div>
                 </div>
               </div>
             </>
