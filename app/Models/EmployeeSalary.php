@@ -105,80 +105,90 @@ class EmployeeSalary extends BaseModel
         $earnings = ['Basic Salary' => $this->basic_salary];
 
         $deductions = [];
+        $deductions = [];
+        $employerContributions = [];
         $totalEarnings = $this->basic_salary;
         $totalDeductions = 0;
 
-        foreach ($components as $component) {
-            $override = $customOverrides[$component->id] ?? [];
-            $customAmount = $override['custom_amount'] ?? null;
-            $customPercentage = $override['custom_percentage'] ?? null;
-
-            // Determine the amount: custom values take priority over template defaults
-            if (!is_null($customAmount) && $customAmount !== '' && $customAmount !== 0) {
-                $amount = (float) $customAmount;
-            } elseif (!is_null($customPercentage) && $customPercentage !== '' && $customPercentage !== 0) {
-                $amount = ($this->basic_salary * (float) $customPercentage) / 100;
-            } else {
-                // Fallback to template default
-                $amount = $component->calculateAmount($this->basic_salary);
-            }
-
-            if ($component->type === 'earning') {
-                $earnings[$component->name] = $amount;
-                $totalEarnings += $amount;
-            } else {
-                $deductions[$component->name] = $amount;
-                $totalDeductions += $amount;
-            }
-        }
-
-        // --- Indonesian BPJS Statutory Calculations ---
-        $basicSalary = $this->basic_salary;
-
-        // Caps - fetch from settings or use default
+        // Fetch BPJS Caps once
         $companyId = $this->creator ? $this->creator->company_id : ($this->employee ? $this->employee->company_id : auth()->id());
         $bpjsKesehatanCap = getSetting('bpjsKesehatanCap', $companyId);
-        $bpjsKesehatanCap = $bpjsKesehatanCap ? (float) $bpjsKesehatanCap : 12000000;
-
+        $bpjsKesehatanCap = $bpjsKesehatanCap ? (float) $bpjsKesehatanCap : 12500000;
         $bpjsJpCap = getSetting('bpjsJpCap', $companyId);
-        $bpjsJpCap = $bpjsJpCap ? (float) $bpjsJpCap : 10042300;
+        $bpjsJpCap = $bpjsJpCap ? (float) $bpjsJpCap : 12500000;
 
-        // Basis for calculation
+        $basicSalary = $this->basic_salary;
         $basisKesehatan = min($basicSalary, $bpjsKesehatanCap);
         $basisJp = min($basicSalary, $bpjsJpCap);
 
-        // 1. BPJS Kesehatan (1% EE, 4% ER)
-        $eeBpjsKes = $basisKesehatan * 0.01;
-        $erBpjsKes = $basisKesehatan * 0.04;
+        foreach ($components as $component) {
+            $name = $component->name;
+            $lowerName = strtolower($name);
+            
+            // Enhanced BPJS detection
+            $isBpjs = str_contains($lowerName, 'bpjs') || 
+                      str_contains($lowerName, 'jht') || 
+                      str_contains($lowerName, 'jkk') || 
+                      str_contains($lowerName, 'jkm') || 
+                      str_contains($lowerName, 'kesehatan') || 
+                      str_contains($lowerName, 'pensiun') || 
+                      str_contains($lowerName, 'jp');
 
-        // 2. BPJS Ketenagakerjaan - JHT (Jaminan Hari Tua) (2% EE, 3.7% ER)
-        $eeJht = $basicSalary * 0.02;
-        $erJht = $basicSalary * 0.037;
+            if ($isBpjs) {
+                // Determine BPJS amounts based on statutory rules, overriding any HR input
+                $amount = 0; // EE deduction amount
+                
+                if (str_contains($lowerName, 'kesehatan')) {
+                    $amount = $basisKesehatan * 0.01;
+                    $employerContributions['ER_' . $name] = $basisKesehatan * 0.04;
+                    $name = $name . ' (1%)';
+                } elseif (str_contains($lowerName, 'jht')) {
+                    $amount = $basicSalary * 0.02;
+                    $employerContributions['ER_' . $name] = $basicSalary * 0.037;
+                    $name = $name . ' (2%)';
+                } elseif (str_contains($lowerName, 'jp') || str_contains($lowerName, 'pensiun')) {
+                    $amount = $basisJp * 0.01;
+                    $employerContributions['ER_' . $name] = $basisJp * 0.02;
+                    $name = $name . ' (1%)';
+                } elseif (str_contains($lowerName, 'jkk') || str_contains($lowerName, 'kecelakaan')) {
+                    $amount = 0; // EE doesn't pay
+                    $employerContributions['ER_' . $name] = $basicSalary * 0.0024;
+                    $name = $name . ' (Employer Only)';
+                } elseif (str_contains($lowerName, 'jkm') || str_contains($lowerName, 'kematian')) {
+                    $amount = 0; // EE doesn't pay
+                    $employerContributions['ER_' . $name] = $basicSalary * 0.003;
+                    $name = $name . ' (Employer Only)';
+                }
 
-        // 3. BPJS Ketenagakerjaan - JP (Jaminan Pensiun) (1% EE, 2% ER)
-        $eeJp = $basisJp * 0.01;
-        $erJp = $basisJp * 0.02;
+                // Append EE deductions if greater than 0
+                if ($amount > 0) {
+                    $deductions[$name] = $amount;
+                    $totalDeductions += $amount;
+                }
 
-        // 4. BPJS Ketenagakerjaan - JKK (Jaminan Kecelakaan Kerja) (0.24% ER - Defaulting to low risk)
-        $erJkk = $basicSalary * 0.0024;
-
-        // 5. BPJS Ketenagakerjaan - JKM (Jaminan Kematian) (0.3% ER)
-        $erJkm = $basicSalary * 0.003;
-
-        // Append to Employee Deductions (reduces Net Pay)
-        $deductions['BPJS Kesehatan (1%)'] = $eeBpjsKes;
-        $deductions['BPJS JHT (2%)'] = $eeJht;
-        $deductions['BPJS JP (1%)'] = $eeJp;
-        $totalDeductions += ($eeBpjsKes + $eeJht + $eeJp);
-
-        // Store Employer Contributions (does NOT reduce Net Pay)
-        $employerContributions = [
-            'ER_BPJS_Kesehatan_(4%)' => $erBpjsKes,
-            'ER_BPJS_JHT_(3.7%)' => $erJht,
-            'ER_BPJS_JP_(2%)' => $erJp,
-            'ER_BPJS_JKK_(0.24%)' => $erJkk,
-            'ER_BPJS_JKM_(0.3%)' => $erJkm,
-        ];
+            } else {
+                // --- Standard Non-BPJS Components ---
+                $override = $customOverrides[$component->id] ?? [];
+                $customAmount = $override['custom_amount'] ?? null;
+                $customPercentage = $override['custom_percentage'] ?? null;
+    
+                if (!is_null($customAmount) && $customAmount !== '' && $customAmount !== 0) {
+                    $amount = (float) $customAmount;
+                } elseif (!is_null($customPercentage) && $customPercentage !== '' && $customPercentage !== 0) {
+                    $amount = ($this->basic_salary * (float) $customPercentage) / 100;
+                } else {
+                    $amount = $component->calculateAmount($this->basic_salary);
+                }
+    
+                if ($component->type === 'earning') {
+                    $earnings[$name] = $amount;
+                    $totalEarnings += $amount;
+                } else {
+                    $deductions[$name] = $amount;
+                    $totalDeductions += $amount;
+                }
+            }
+        }
 
         return [
             'basic_salary' => $this->basic_salary,

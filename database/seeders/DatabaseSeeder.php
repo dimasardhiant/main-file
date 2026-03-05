@@ -132,6 +132,7 @@ class DatabaseSeeder extends Seeder
 
                 // // Payroll Management Seeders
                 SalaryComponentSeeder::class,
+                BpjsComponentSeeder::class,
                 EmployeeSalarySeeder::class,
                 PayrollRunSeeder::class,
                 // PayslipSeeder::class,

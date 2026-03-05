@@ -61,8 +61,8 @@ export default function SystemSettings({
     landingPageEnabled: settingsData.landingPageEnabled === 'true' || settingsData.landingPageEnabled === true || settingsData.landingPageEnabled === '1' || (settingsData.landingPageEnabled === undefined ? defaultSettings.landingPageEnabled : false),
     ipRestrictionEnabled: settingsData.ipRestrictionEnabled === '1' || settingsData.ipRestrictionEnabled === 1 || defaultSettings.ipRestrictionEnabled,
     termsConditionsUrl: settingsData.termsConditionsUrl || defaultSettings.termsConditionsUrl,
-    bpjsKesehatanCap: settingsData.bpjsKesehatanCap || defaultSettings.bpjsKesehatanCap,
-    bpjsJpCap: settingsData.bpjsJpCap || defaultSettings.bpjsJpCap
+    bpjsKesehatanCap: settingsData.bpjsKesehatanCap || defaultSettings.bpjsKesehatanCap || 12500000,
+    bpjsJpCap: settingsData.bpjsJpCap || defaultSettings.bpjsJpCap || 12500000
   }));
 
   // Update state when settings change
@@ -70,16 +70,16 @@ export default function SystemSettings({
     if (Object.keys(settingsData).length > 0) {
       // Create merged settings object
       const mergedSettings = Object.keys(defaultSettings).reduce((acc, key) => {
-        acc[key] = settingsData[key] || defaultSettings[key];
+        acc[key] = settingsData[key] !== undefined ? settingsData[key] : (defaultSettings as any)[key];
         return acc;
-      }, {} as Record<string, string>);
+      }, {} as any);
 
       setSystemSettings(prevSettings => ({
         ...prevSettings,
         ...mergedSettings,
-        emailVerification: mergedSettings.emailVerification === 'true' || mergedSettings.emailVerification === true || mergedSettings.emailVerification === '1',
-        landingPageEnabled: mergedSettings.landingPageEnabled === 'true' || mergedSettings.landingPageEnabled === true || mergedSettings.landingPageEnabled === '1' || (mergedSettings.landingPageEnabled === undefined ? defaultSettings.landingPageEnabled : false),
-        ipRestrictionEnabled: mergedSettings.ipRestrictionEnabled === '1' || mergedSettings.ipRestrictionEnabled === 1 || false,
+        emailVerification: String(mergedSettings.emailVerification) === 'true' || String(mergedSettings.emailVerification) === '1',
+        landingPageEnabled: String(mergedSettings.landingPageEnabled) === 'true' || String(mergedSettings.landingPageEnabled) === '1' || (mergedSettings.landingPageEnabled === undefined ? defaultSettings.landingPageEnabled : false),
+        ipRestrictionEnabled: String(mergedSettings.ipRestrictionEnabled) === '1' || String(mergedSettings.ipRestrictionEnabled) === 'true' || false,
         termsConditionsUrl: mergedSettings.termsConditionsUrl || defaultSettings.termsConditionsUrl,
         bpjsKesehatanCap: mergedSettings.bpjsKesehatanCap || defaultSettings.bpjsKesehatanCap,
         bpjsJpCap: mergedSettings.bpjsJpCap || defaultSettings.bpjsJpCap
@@ -130,8 +130,9 @@ export default function SystemSettings({
     router.post(route('settings.system.update'), cleanSettings, {
       preserveScroll: true,
       onSuccess: (page) => {
-        const successMessage = page.props.flash?.success;
-        const errorMessage = page.props.flash?.error;
+        const flashProps = (page.props.flash || {}) as Record<string, string>;
+        const successMessage = flashProps.success;
+        const errorMessage = flashProps.error;
 
         if (successMessage) {
           toast.success(successMessage);
@@ -414,7 +415,7 @@ export default function SystemSettings({
                       value={systemSettings.bpjsKesehatanCap}
                       onChange={(e) => handleSystemSettingsChange('bpjsKesehatanCap', e.target.value)}
                     />
-                    <p className="text-xs text-muted-foreground">{t("Default: 12000000")}</p>
+                    <p className="text-xs text-muted-foreground">{t("Default: 12500000")}</p>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="bpjsJpCap">{t("Max Salary Basis (BPJS JP)")}</Label>
@@ -425,7 +426,7 @@ export default function SystemSettings({
                       value={systemSettings.bpjsJpCap}
                       onChange={(e) => handleSystemSettingsChange('bpjsJpCap', e.target.value)}
                     />
-                    <p className="text-xs text-muted-foreground">{t("Default: 10042300")}</p>
+                    <p className="text-xs text-muted-foreground">{t("Default: 12500000")}</p>
                   </div>
                 </div>
               </div>

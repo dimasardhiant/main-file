@@ -79,13 +79,21 @@ class Payslip extends BaseModel
             throw new \Exception('Payroll entry not found');
         }
 
+        $rawDeductions = $payrollEntry->deductions_breakdown ?? [];
+        $deductions = [];
+        foreach ($rawDeductions as $name => $amount) {
+            if (strpos($name, 'ER_') !== 0 && strpos($name, 'ER ') !== 0) {
+                $deductions[$name] = $amount;
+            }
+        }
+
         $data = [
             'payslip' => $this,
             'payrollEntry' => $payrollEntry,
             'employee' => $payrollEntry->employee,
             'payrollRun' => $payrollEntry->payrollRun,
             'earnings' => $payrollEntry->earnings_breakdown ?? [],
-            'deductions' => $payrollEntry->deductions_breakdown ?? [],
+            'deductions' => $deductions,
             'employeeData' => $payrollEntry->employee->employee,
             'companySettings' => settings(),
         ];
