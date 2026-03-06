@@ -121,6 +121,9 @@ class EmployeeSalary extends BaseModel
         $basisKesehatan = min($basicSalary, $bpjsKesehatanCap);
         $basisJp = min($basicSalary, $bpjsJpCap);
 
+        // Track processed BPJS types to prevent double-counting from duplicate components
+        $processedBpjs = [];
+
         foreach ($components as $component) {
             $name = $component->name;
             $lowerName = strtolower($name);
@@ -135,34 +138,67 @@ class EmployeeSalary extends BaseModel
                       str_contains($lowerName, 'jp');
 
             if ($isBpjs) {
+                // Determine BPJS type — check ketenagakerjaan subtypes FIRST before bare kesehatan
+                $bpjsType = null;
+                if (str_contains($lowerName, 'jht')) {
+                    $bpjsType = 'jht';
+                } elseif (str_contains($lowerName, 'jkk') || str_contains($lowerName, 'kecelakaan')) {
+                    $bpjsType = 'jkk';
+                } elseif (str_contains($lowerName, 'jkm') || str_contains($lowerName, 'kematian')) {
+                    $bpjsType = 'jkm';
+                } elseif (str_contains($lowerName, 'jp') || str_contains($lowerName, 'pensiun')) {
+                    $bpjsType = 'jp';
+                } elseif (str_contains($lowerName, 'kesehatan')) {
+                    $bpjsType = 'kesehatan';
+                }
+
+                // Skip if this BPJS type was already processed (prevents double-counting duplicates)
+                if ($bpjsType === null || in_array($bpjsType, $processedBpjs)) {
+                    continue;
+                }
+                $processedBpjs[] = $bpjsType;
+
                 // Determine BPJS amounts based on statutory rules, overriding any HR input
                 $amount = 0; // EE deduction amount
+                $erAmount = 0; // ER contribution amount
+                $deductionKey = $name; // Use original component name as key (no suffix)
                 
-                if (str_contains($lowerName, 'kesehatan')) {
-                    $amount = $basisKesehatan * 0.01;
-                    $employerContributions['ER_' . $name] = $basisKesehatan * 0.04;
-                    $name = $name . ' (1%)';
-                } elseif (str_contains($lowerName, 'jht')) {
-                    $amount = $basicSalary * 0.02;
-                    $employerContributions['ER_' . $name] = $basicSalary * 0.037;
-                    $name = $name . ' (2%)';
-                } elseif (str_contains($lowerName, 'jp') || str_contains($lowerName, 'pensiun')) {
-                    $amount = $basisJp * 0.01;
-                    $employerContributions['ER_' . $name] = $basisJp * 0.02;
-                    $name = $name . ' (1%)';
-                } elseif (str_contains($lowerName, 'jkk') || str_contains($lowerName, 'kecelakaan')) {
-                    $amount = 0; // EE doesn't pay
-                    $employerContributions['ER_' . $name] = $basicSalary * 0.0024;
-                    $name = $name . ' (Employer Only)';
-                } elseif (str_contains($lowerName, 'jkm') || str_contains($lowerName, 'kematian')) {
-                    $amount = 0; // EE doesn't pay
-                    $employerContributions['ER_' . $name] = $basicSalary * 0.003;
-                    $name = $name . ' (Employer Only)';
+                switch ($bpjsType) {
+                    case 'kesehatan':
+                        // BPJS Kesehatan: EE 1%, ER 1% — capped at bpjsKesehatanCap (flat 125,000 if above cap)
+                        $amount = $basisKesehatan * 0.01;
+                        $erAmount = $basisKesehatan * 0.01;
+                        break;
+                    case 'jht':
+                        // BPJS Ketenagakerjaan JHT: EE 2%, ER 3.7% — no cap
+                        $amount = $basicSalary * 0.02;
+                        $erAmount = $basicSalary * 0.037;
+                        break;
+                    case 'jp':
+                        // BPJS Ketenagakerjaan JP: EE 1%, ER 1% — capped at bpjsJpCap (flat 125,000 if above cap)
+                        $amount = $basisJp * 0.01;
+                        $erAmount = $basisJp * 0.01;
+                        break;
+                    case 'jkk':
+                        // BPJS Ketenagakerjaan JKK: EE 0%, ER 0.24% — no cap
+                        $amount = 0;
+                        $erAmount = $basicSalary * 0.0024;
+                        break;
+                    case 'jkm':
+                        // BPJS Ketenagakerjaan JKM: EE 0%, ER 0.3% — no cap
+                        $amount = 0;
+                        $erAmount = $basicSalary * 0.003;
+                        break;
+                }
+
+                // Store ER contribution
+                if ($erAmount > 0) {
+                    $employerContributions['ER_' . $deductionKey] = $erAmount;
                 }
 
                 // Append EE deductions if greater than 0
                 if ($amount > 0) {
-                    $deductions[$name] = $amount;
+                    $deductions[$deductionKey] = $amount;
                     $totalDeductions += $amount;
                 }
 

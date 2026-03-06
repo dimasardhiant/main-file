@@ -469,14 +469,21 @@ class PayslipController extends Controller
                 $cleanName = str_replace(' ', '_', $lowerName);
                 $amount = (float) $amount;
 
-                // Check if this is an ER Contribution
+                // Check if this is an ER Contribution (prefixed with ER_)
                 if (strpos($name, 'ER_') === 0 || strpos($name, 'ER ') === 0) {
-                    if (str_contains($cleanName, 'kesehatan')) {
-                        $erValues['bpjs_healthcare'] += $amount;
-                    } elseif (str_contains($cleanName, 'jht') || str_contains($cleanName, 'jkk') || str_contains($cleanName, 'jkm') || str_contains($cleanName, 'social')) {
+                    // Check ketenagakerjaan subtypes BEFORE bare kesehatan
+                    if (str_contains($cleanName, 'jht')) {
                         $erValues['bpjs_social_security'] += $amount;
-                    } elseif (str_contains($cleanName, 'jp') || str_contains($cleanName, 'pension') || str_contains($cleanName, 'pensiun')) {
+                    } elseif (str_contains($cleanName, 'jkk')) {
+                        $erValues['bpjs_social_security'] += $amount;
+                    } elseif (str_contains($cleanName, 'jkm')) {
+                        $erValues['bpjs_social_security'] += $amount;
+                    } elseif (str_contains($cleanName, 'ketenagakerjaan') && str_contains($cleanName, 'jp')) {
                         $erValues['pension'] += $amount;
+                    } elseif (str_contains($cleanName, 'pensiun') || str_contains($cleanName, 'pension')) {
+                        $erValues['pension'] += $amount;
+                    } elseif (str_contains($cleanName, 'kesehatan') || str_contains($cleanName, 'healthcare') || str_contains($cleanName, 'health')) {
+                        $erValues['bpjs_healthcare'] += $amount;
                     } elseif (str_contains($cleanName, 'tax') || str_contains($cleanName, 'pph')) {
                         if (str_contains($cleanName, 'irregular')) {
                             $erValues['irregular_income_tax'] += $amount;
@@ -487,12 +494,20 @@ class PayslipController extends Controller
                     continue; // Skip the rest of the EE logic for ER items
                 }
 
-                // EE Deductions Priority: Check Pension/JP first, then Health, then Social Security (generic)
-                if (str_contains($cleanName, 'pension') || str_contains($cleanName, 'pensiun') || str_contains($cleanName, 'jp')) {
+                // EE Deductions: Check ketenagakerjaan subtypes BEFORE bare kesehatan
+                if (str_contains($cleanName, 'jht')) {
+                    $eeValues['bpjs_social_security'] += $amount;
+                } elseif (str_contains($cleanName, 'jkk')) {
+                    $eeValues['bpjs_social_security'] += $amount;
+                } elseif (str_contains($cleanName, 'jkm')) {
+                    $eeValues['bpjs_social_security'] += $amount;
+                } elseif (str_contains($cleanName, 'ketenagakerjaan') && str_contains($cleanName, 'jp')) {
                     $eeValues['pension'] += $amount;
-                } elseif (str_contains($cleanName, 'bpjs') && (str_contains($cleanName, 'health') || str_contains($cleanName, 'kesehatan') || str_contains($cleanName, 'healthcare'))) {
+                } elseif (str_contains($cleanName, 'pensiun') || str_contains($cleanName, 'pension')) {
+                    $eeValues['pension'] += $amount;
+                } elseif (str_contains($cleanName, 'kesehatan') || str_contains($cleanName, 'healthcare') || str_contains($cleanName, 'health')) {
                     $eeValues['bpjs_healthcare'] += $amount;
-                } elseif (str_contains($cleanName, 'bpjs') || str_contains($cleanName, 'jht') || str_contains($cleanName, 'jkk') || str_contains($cleanName, 'jkm') || str_contains($cleanName, 'social') || str_contains($cleanName, 'ketenagakerjaan') || str_contains($cleanName, 'working')) {
+                } elseif (str_contains($cleanName, 'ketenagakerjaan') || str_contains($cleanName, 'bpjs') || str_contains($cleanName, 'social') || str_contains($cleanName, 'working')) {
                     $eeValues['bpjs_social_security'] += $amount;
                 } elseif (str_contains($cleanName, 'tax') || str_contains($cleanName, 'pph') || str_contains($cleanName, 'pajak')) {
                     if (str_contains($cleanName, 'irregular') || str_contains($cleanName, 'tidak_teratur')) {
@@ -684,14 +699,21 @@ class PayslipController extends Controller
                 $cleanName = str_replace(' ', '_', $lowerName);
                 $amount = (float) $amount;
 
-                // Check if this is an ER Contribution
+                // Check if this is an ER Contribution (prefixed with ER_)
                 if (strpos($name, 'ER_') === 0 || strpos($name, 'ER ') === 0) {
-                    if (str_contains($cleanName, 'kesehatan')) {
-                        $erValues['bpjs_healthcare'] += $amount;
-                    } elseif (str_contains($cleanName, 'jht') || str_contains($cleanName, 'jkk') || str_contains($cleanName, 'jkm') || str_contains($cleanName, 'social')) {
+                    // Check ketenagakerjaan subtypes BEFORE bare kesehatan
+                    if (str_contains($cleanName, 'jht')) {
                         $erValues['bpjs_social_security'] += $amount;
-                    } elseif (str_contains($cleanName, 'jp') || str_contains($cleanName, 'pension') || str_contains($cleanName, 'pensiun')) {
+                    } elseif (str_contains($cleanName, 'jkk')) {
+                        $erValues['bpjs_social_security'] += $amount;
+                    } elseif (str_contains($cleanName, 'jkm')) {
+                        $erValues['bpjs_social_security'] += $amount;
+                    } elseif (str_contains($cleanName, 'ketenagakerjaan') && str_contains($cleanName, 'jp')) {
                         $erValues['pension'] += $amount;
+                    } elseif (str_contains($cleanName, 'pensiun') || str_contains($cleanName, 'pension')) {
+                        $erValues['pension'] += $amount;
+                    } elseif (str_contains($cleanName, 'kesehatan') || str_contains($cleanName, 'healthcare') || str_contains($cleanName, 'health')) {
+                        $erValues['bpjs_healthcare'] += $amount;
                     } elseif (str_contains($cleanName, 'tax') || str_contains($cleanName, 'pph')) {
                         if (str_contains($cleanName, 'irregular')) {
                             $erValues['irregular_income_tax'] += $amount;
@@ -702,12 +724,20 @@ class PayslipController extends Controller
                     continue; // Skip the rest of the EE logic for ER items
                 }
 
-                // EE Deductions Priority: Check Pension/JP first, then Health, then Social Security (generic)
-                if (str_contains($cleanName, 'pension') || str_contains($cleanName, 'pensiun') || str_contains($cleanName, 'jp')) {
+                // EE Deductions: Check ketenagakerjaan subtypes BEFORE bare kesehatan
+                if (str_contains($cleanName, 'jht')) {
+                    $eeValues['bpjs_social_security'] += $amount;
+                } elseif (str_contains($cleanName, 'jkk')) {
+                    $eeValues['bpjs_social_security'] += $amount;
+                } elseif (str_contains($cleanName, 'jkm')) {
+                    $eeValues['bpjs_social_security'] += $amount;
+                } elseif (str_contains($cleanName, 'ketenagakerjaan') && str_contains($cleanName, 'jp')) {
                     $eeValues['pension'] += $amount;
-                } elseif (str_contains($cleanName, 'bpjs') && (str_contains($cleanName, 'health') || str_contains($cleanName, 'kesehatan') || str_contains($cleanName, 'healthcare'))) {
+                } elseif (str_contains($cleanName, 'pensiun') || str_contains($cleanName, 'pension')) {
+                    $eeValues['pension'] += $amount;
+                } elseif (str_contains($cleanName, 'kesehatan') || str_contains($cleanName, 'healthcare') || str_contains($cleanName, 'health')) {
                     $eeValues['bpjs_healthcare'] += $amount;
-                } elseif (str_contains($cleanName, 'bpjs') || str_contains($cleanName, 'jht') || str_contains($cleanName, 'jkk') || str_contains($cleanName, 'jkm') || str_contains($cleanName, 'social') || str_contains($cleanName, 'ketenagakerjaan') || str_contains($cleanName, 'working')) {
+                } elseif (str_contains($cleanName, 'ketenagakerjaan') || str_contains($cleanName, 'bpjs') || str_contains($cleanName, 'social') || str_contains($cleanName, 'working')) {
                     $eeValues['bpjs_social_security'] += $amount;
                 } elseif (str_contains($cleanName, 'tax') || str_contains($cleanName, 'pph') || str_contains($cleanName, 'pajak')) {
                     if (str_contains($cleanName, 'irregular') || str_contains($cleanName, 'tidak_teratur')) {

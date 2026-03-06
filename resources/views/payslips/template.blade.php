@@ -229,7 +229,8 @@
             <tbody>
                 @php
                     $earnings = $payrollEntry->earnings_breakdown ?? [];
-                    $deductions = $payrollEntry->deductions_breakdown ?? [];
+                    // Use the pre-filtered $deductions variable (ER items already removed by Payslip::generatePDF)
+                    $deductions = $deductions ?? [];
 
                     // Add overtime to earnings if exists
                     if ($payrollEntry->overtime_amount > 0) {
