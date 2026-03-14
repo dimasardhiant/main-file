@@ -21,6 +21,8 @@ return new class extends Migration
             $table->integer('employee_count')->default(0);
             $table->enum('status', ['draft', 'processing', 'completed', 'cancelled'])->default('draft');
             $table->text('notes')->nullable();
+            $table->unsignedBigInteger('branch_id')->nullable();
+            $table->foreign('branch_id')->references('id')->on('branches')->onDelete('set null');
             $table->foreignId('created_by')->constrained('users')->onDelete('cascade');
             $table->timestamps();
         });

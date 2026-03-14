@@ -15,7 +15,7 @@ class PayrollRunController extends Controller
     public function index(Request $request)
     {
         if (Auth::user()->can('manage-payroll-runs')) {
-            $query = PayrollRun::with(['creator'])->where(function ($q) {
+            $query = PayrollRun::with(['creator', 'branch'])->where(function ($q) {
                 if (Auth::user()->can('manage-any-payroll-runs')) {
                     $q->whereIn('created_by', getCompanyAndUsersId());
                 } elseif (Auth::user()->can('manage-own-payroll-runs')) {
@@ -126,23 +126,36 @@ class PayrollRunController extends Controller
     public function store(Request $request)
     {
         if (Auth::user()->can('create-payroll-runs')) {
+            // Convert 'all' branch_id to null
+            if ($request->branch_id === 'all') {
+                $request->merge(['branch_id' => null]);
+            }
+
             $validated = $request->validate([
                 'title' => 'required|string|max:255',
                 'payroll_frequency' => 'required|in:weekly,biweekly,monthly',
                 'pay_period_start' => 'required|date',
                 'pay_period_end' => 'required|date|after:pay_period_start',
                 'pay_date' => 'required|date|after_or_equal:pay_period_end',
+                'branch_id' => 'nullable|exists:branches,id',
                 'notes' => 'nullable|string',
             ]);
 
             $validated['created_by'] = creatorId();
             $validated['status'] = 'draft';
 
-            // Check if payroll run already exists for this period
-            $exists = PayrollRun::where('pay_period_start', $validated['pay_period_start'])
+            // Check if payroll run already exists for this period and branch
+            $existsQuery = PayrollRun::where('pay_period_start', $validated['pay_period_start'])
                 ->where('pay_period_end', $validated['pay_period_end'])
-                ->whereIn('created_by', getCompanyAndUsersId())
-                ->exists();
+                ->whereIn('created_by', getCompanyAndUsersId());
+
+            if (!empty($validated['branch_id'])) {
+                $existsQuery->where('branch_id', $validated['branch_id']);
+            } else {
+                $existsQuery->whereNull('branch_id');
+            }
+
+            $exists = $existsQuery->exists();
 
             if ($exists) {
                 return redirect()->back()->with('error', __('Payroll run already exists for this period.'));
@@ -165,12 +178,18 @@ class PayrollRunController extends Controller
 
             if ($payrollRun) {
                 try {
+                    // Convert 'all' branch_id to null
+                    if ($request->branch_id === 'all') {
+                        $request->merge(['branch_id' => null]);
+                    }
+
                     $validated = $request->validate([
                         'title' => 'required|string|max:255',
                         'payroll_frequency' => 'required|in:weekly,biweekly,monthly',
                         'pay_period_start' => 'required|date',
                         'pay_period_end' => 'required|date|after:pay_period_start',
                         'pay_date' => 'required|date|after_or_equal:pay_period_end',
+                        'branch_id' => 'nullable|exists:branches,id',
                         'notes' => 'nullable|string',
                     ]);
 

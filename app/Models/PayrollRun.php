@@ -20,6 +20,7 @@ class PayrollRun extends BaseModel
         'employee_count',
         'status',
         'notes',
+        'branch_id',
         'created_by',
     ];
 
@@ -57,6 +58,14 @@ class PayrollRun extends BaseModel
     }
 
     /**
+     * Get the branch for this payroll run.
+     */
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
+    /**
      * Calculate and update totals.
      */
     public function calculateTotals()
@@ -84,14 +93,21 @@ class PayrollRun extends BaseModel
         $this->save();
 
         try {
-            // Get all active employees
-            $employees = User::with('employee')->where('type', 'employee')
+            // Get all active employees, filtered by branch if set
+            $employeeQuery = User::with('employee')->where('type', 'employee')
                 ->whereIn('created_by', getCompanyAndUsersId())
                 ->whereHas('employee', function ($q) {
                     $q->whereIn('employee_status', ['active', 'probation']);
-                })
-                ->orderby('id', 'desc')
-                ->get();
+                });
+
+            // Filter by branch if branch_id is set
+            if ($this->branch_id) {
+                $employeeQuery->whereHas('employee', function ($q) {
+                    $q->where('branch_id', $this->branch_id);
+                });
+            }
+
+            $employees = $employeeQuery->orderby('id', 'desc')->get();
 
             foreach ($employees as $employee) {
                 $this->processEmployeePayroll($employee);

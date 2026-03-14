@@ -295,6 +295,15 @@ export default function PayrollRuns() {
       )
     },
     {
+      key: 'branch',
+      label: t('Branch / PT'),
+      render: (value: any, row: any) => (
+        <span className="text-sm">
+          {row.branch ? row.branch.name : <span className="text-gray-400">{t('All Branches')}</span>}
+        </span>
+      )
+    },
+    {
       key: 'pay_period',
       label: t('Pay Period'),
       render: (value: any, row: any) => (
@@ -553,6 +562,19 @@ export default function PayrollRuns() {
         formConfig={{
           fields: [
             { name: 'title', label: t('Title'), type: 'text', required: true },
+            {
+              name: 'branch_id',
+              label: t('Branch / PT'),
+              type: 'select',
+              required: false,
+              options: [
+                { value: 'all', label: t('All Branches (All Employees)') },
+                ...(branches || []).map((branch: any) => ({
+                  value: branch.id.toString(),
+                  label: branch.name
+                }))
+              ]
+            },
             {
               name: 'payroll_frequency',
               label: t('Payroll Frequency'),
